@@ -65,8 +65,10 @@ Deploy to Vercel as a standard Next.js project.
 
 1. Push this repo to GitHub.
 2. Import the repo in Vercel.
-3. Connect a Vercel Blob store.
-4. Confirm `BLOB_READ_WRITE_TOKEN` is present.
-5. Deploy.
+3. Use the `Next.js` framework preset. This app is not a static HTML site anymore, and the homepage is `app/page.tsx`.
+4. Leave the output directory empty so Vercel uses Next.js' `.next` build output.
+5. Connect a Vercel Blob store.
+6. Confirm `BLOB_READ_WRITE_TOKEN` is present.
+7. Deploy.
 
 No accounts, payments, or email sending are included in this MVP.
