@@ -126,4 +126,8 @@ button:active {
     left: 16px;
     justify-content: space-between;
   }
+
+  .controls-copy {
+    text-align: left;
+  }
 }
