@@ -192,7 +192,7 @@ function paintLayer(layer) {
   ctx.clearRect(0, 0, state.width, state.height);
 
   if (layer.imageElement) {
-    drawImageCover(ctx, layer.imageElement, state.width, state.height);
+    drawImageContain(ctx, layer.imageElement, state.width, state.height, layer.palette);
   } else {
     paintPlaceholder(ctx, layer);
   }
@@ -228,10 +228,17 @@ function paintPlaceholder(ctx, layer) {
   ctx.restore();
 }
 
-function drawImageCover(ctx, image, width, height) {
-  const scale = Math.max(width / image.naturalWidth, height / image.naturalHeight);
+function drawImageContain(ctx, image, width, height, palette) {
+  const scale = Math.min(width / image.naturalWidth, height / image.naturalHeight);
   const drawWidth = image.naturalWidth * scale;
   const drawHeight = image.naturalHeight * scale;
+  const [light, mid, dark] = palette;
+  const matte = ctx.createRadialGradient(width / 2, height / 2, 0, width / 2, height / 2, Math.max(width, height) * 0.72);
+  matte.addColorStop(0, light);
+  matte.addColorStop(0.58, mid);
+  matte.addColorStop(1, dark);
+  ctx.fillStyle = matte;
+  ctx.fillRect(0, 0, width, height);
   ctx.drawImage(image, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
 }
 
@@ -379,7 +386,7 @@ function carveBetweenHeads() {
   const steps = Math.max(1, Math.ceil(distance / 6));
   for (let i = 1; i <= steps; i += 1) {
     const point = state.lastHead.clone().lerp(state.head, i / steps);
-    const radius = state.brush * (0.68 + noise01(point.x * 0.02 + point.y * 0.013) * 0.36);
+    const radius = state.brush * (0.82 + Math.sin(point.x * 0.012 + point.y * 0.008) * 0.08);
     cutOrganicHole(layer, point, radius);
     addSeamPoint(point, radius);
   }
@@ -389,14 +396,14 @@ function carveBetweenHeads() {
 
 function cutOrganicHole(layer, point, radius) {
   const ctx = layer.maskCtx;
-  const count = 24;
+  const count = 36;
 
   ctx.save();
   ctx.globalCompositeOperation = "destination-out";
   ctx.beginPath();
   for (let i = 0; i <= count; i += 1) {
     const angle = (Math.PI * 2 * i) / count;
-    const wobble = 0.62 + noise01(point.x * 0.019 + point.y * 0.027 + i * 1.71) * 0.82;
+    const wobble = 0.94 + Math.sin(point.x * 0.009 + point.y * 0.011 + i * 0.7) * 0.06;
     const x = point.x + Math.cos(angle) * radius * wobble;
     const y = point.y + Math.sin(angle) * radius * wobble;
     if (i === 0) ctx.moveTo(x, y);
@@ -405,15 +412,24 @@ function cutOrganicHole(layer, point, radius) {
   ctx.closePath();
   ctx.fill();
 
-  ctx.globalAlpha = 0.5;
+  ctx.globalAlpha = 0.38;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  ctx.lineWidth = radius * 0.72;
+  ctx.lineWidth = radius * 0.95;
   ctx.strokeStyle = "#000";
   ctx.beginPath();
-  ctx.moveTo(point.x - radius * 0.35, point.y);
-  ctx.lineTo(point.x + radius * 0.35, point.y);
+  ctx.moveTo(point.x - radius * 0.22, point.y);
+  ctx.lineTo(point.x + radius * 0.22, point.y);
   ctx.stroke();
+
+  const feather = ctx.createRadialGradient(point.x, point.y, radius * 0.48, point.x, point.y, radius * 1.35);
+  feather.addColorStop(0, "rgba(0, 0, 0, 0.32)");
+  feather.addColorStop(1, "rgba(0, 0, 0, 0)");
+  ctx.globalAlpha = 0.34;
+  ctx.fillStyle = feather;
+  ctx.beginPath();
+  ctx.arc(point.x, point.y, radius * 1.35, 0, Math.PI * 2);
+  ctx.fill();
   ctx.restore();
 }
 
@@ -422,7 +438,7 @@ function addSeamPoint(point, radius) {
   const dx = point.x - previous.x;
   const dy = point.y - previous.y;
   const length = Math.hypot(dx, dy) || 1;
-  const jitter = (noise01(point.x * 0.04 + point.y * 0.03) - 0.5) * radius * 0.55;
+  const jitter = Math.sin(point.x * 0.015 + point.y * 0.013) * radius * 0.11;
 
   state.seam.push({
     x: point.x + (-dy / length) * jitter,
@@ -487,7 +503,7 @@ function updateFlap() {
     const world = screenToWorld(point.x, point.y);
     const width = (point.radius / state.width) * state.worldWidth * 2;
     const curl = Math.sin((index / Math.max(1, path.length - 1)) * Math.PI) * lift;
-    const rough = (noise01(point.x * 0.071 + point.y * 0.083) - 0.5) * width * 0.55;
+    const rough = Math.sin(point.x * 0.018 + point.y * 0.012) * width * 0.12;
 
     const inner = world.clone().addScaledVector(normal, -width * 0.38 + rough * 0.2);
     const outer = world.clone().addScaledVector(normal, width * 0.75 + curl + rough);

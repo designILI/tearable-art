@@ -43,7 +43,7 @@ The site is already wired to use those filenames. If a file is missing, that lay
 
 The first item in the list is the top layer. The fifth item is the deepest layer.
 
-Images are automatically scaled to cover the full screen, so large landscape images usually work best. For crisp results, use images at least `2400px` wide.
+Images are automatically scaled to fit fully inside the screen without cropping. Square or portrait images will show a quiet matte around the artwork. For crisp results, use images at least `1600px` wide.
 
 ## Running Locally
 
