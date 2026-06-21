@@ -17,11 +17,11 @@ An elegant, single-page layered artwork. Visitors drag across the surface to tea
 
 2. Name them:
 
-   - `layer-01.jpeg`
-   - `layer-02.jpeg`
-   - `layer-03.jpeg`
-   - `layer-04.jpeg`
-   - `layer-05.jpeg`
+   - `layer-01.jpg`
+   - `layer-02.jpg`
+   - `layer-03.jpg`
+   - `layer-04.jpg`
+   - `layer-05.jpg`
 
 The site is already wired to use those filenames. If a file is missing, that layer falls back to its CSS/canvas placeholder.
 
