@@ -51,39 +51,15 @@ body {
   cursor: grabbing;
 }
 
-.intro {
-  position: absolute;
-  top: clamp(16px, 3vw, 30px);
-  left: clamp(16px, 3vw, 30px);
-  z-index: 2;
-  max-width: min(230px, calc(100vw - 44px));
-  color: var(--ink);
-  padding: 10px 12px;
-  border: 1px solid rgba(245, 238, 226, 0.16);
-  border-radius: 999px;
-  background: rgba(16, 15, 13, 0.24);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
-  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.34);
-  pointer-events: none;
-}
-
-.kicker {
-  margin: 0 0 2px;
-  font-size: 0.56rem;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
 h1 {
-  margin: 0;
+  margin: 0 0 2px;
   font-family: "Cormorant Garamond", Georgia, serif;
-  font-size: clamp(1.08rem, 2vw, 1.45rem);
+  font-size: clamp(1rem, 1.6vw, 1.28rem);
   font-weight: 600;
   line-height: 1;
   letter-spacing: 0;
+  color: var(--ink);
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.45);
 }
 
 .controls {
@@ -92,14 +68,18 @@ h1 {
   bottom: max(18px, env(safe-area-inset-bottom));
   z-index: 3;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 12px;
   color: var(--ink);
 }
 
+.controls-copy {
+  text-align: right;
+}
+
 .layer-status {
   margin: 0;
-  padding: 10px 0;
+  padding: 0;
   font-size: 0.78rem;
   font-weight: 600;
   letter-spacing: 0.12em;
@@ -141,11 +121,6 @@ button:active {
 }
 
 @media (max-width: 680px) {
-  .intro {
-    top: 14px;
-    left: 14px;
-  }
-
   .controls {
     right: 16px;
     left: 16px;
