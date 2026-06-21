@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --background: #f6efe3;
+  --foreground: #251f19;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+  background: var(--background);
+}
+
+body {
+  min-height: 100%;
+  margin: 0;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(183, 123, 114, 0.18), transparent 28rem),
+    linear-gradient(135deg, #f6efe3 0%, #ede5d8 52%, #d7ddcf 100%);
+  color: var(--foreground);
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+.stage-canvas {
+  cursor: grab;
+  touch-action: none;
+}
+
+.stage-canvas.is-tearing {
+  cursor: grabbing;
+}

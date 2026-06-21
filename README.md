@@ -1,62 +1,72 @@
-# Tearable Art
+# Momentoria
 
-An elegant, single-page layered artwork. Visitors drag across the surface to tear away the current layer and reveal the artwork underneath.
+Momentoria is a simple full-stack Next.js app for creating a private, tearable image story.
 
-## Files
+> A memory shared through an unfolding image story.
 
-- `index.html` contains the page structure and small overlay UI.
-- `styles.css` controls typography, layout, and the minimal interface.
-- `script.js` builds the WebGL paper scene and handles mouse/touch tearing.
-- `assets/layers/` is where your final art images should go.
+Users upload exactly 5 images, add a title and short message, and receive a private share link. The share page preserves the original layered tear interaction and fades locally after 3 complete reveals in the same browser.
 
-## Replacing the Placeholder Art
+## Stack
 
-1. Add your five image files to `assets/layers/`.
+- Next.js App Router
+- TypeScript
+- Tailwind CSS
+- Three.js for the tearable reveal
+- Vercel Blob for uploaded images and MVP metadata JSON
 
-   Recommended formats: `.jpg`, `.png`, or `.webp`.
+## How Uploads Work
 
-2. Name them:
+The create form posts to `app/api/momentoria/route.ts`.
 
-   - `layer-01.jpg`
-   - `layer-02.jpg`
-   - `layer-03.jpg`
-   - `layer-04.jpg`
-   - `layer-05.jpg`
+1. The route validates the title, message, optional recipient name, and exactly 5 image files.
+2. It creates a high-entropy Momentoria id.
+3. It uploads each image to Vercel Blob under `momentoria/{id}/`.
+4. It saves `metadata.json` to Vercel Blob with the title, message, recipient name, image URLs, and creation time.
+5. It returns `/m/{id}` as the private share URL.
 
-The site is already wired to use those filenames. If a file is missing, that layer falls back to its CSS/canvas placeholder.
+This keeps the MVP deployable without a separate database. For a larger product, replace the metadata helpers in `lib/momentoria.ts` with Vercel Postgres, Neon, Supabase, or another database.
 
-3. If you want different filenames, open `script.js`.
+## Environment Variables
 
-4. Find the `layerSources` list near the top of the file.
-
-5. Replace the image paths:
-
-   ```js
-   const layerSources = [
-     { image: "assets/layers/layer-01.jpg", name: "Layer 1" },
-     { image: "assets/layers/layer-02.jpg", name: "Layer 2" },
-     { image: "assets/layers/layer-03.jpg", name: "Layer 3" },
-     { image: "assets/layers/layer-04.jpg", name: "Layer 4" },
-     { image: "assets/layers/layer-05.jpg", name: "Layer 5" },
-   ];
-   ```
-
-The first item in the list is the top layer. The fifth item is the deepest layer.
-
-Images are automatically scaled to fit fully inside the screen without cropping. Square or portrait images will show a quiet matte around the artwork. For crisp results, use images at least `1600px` wide.
-
-## Running Locally
-
-Serve the folder with any simple local server. The page imports Three.js as an ES module, so a local server is more reliable than opening the file directly.
-
-For example:
+Create a Vercel Blob store and add this variable locally and in Vercel:
 
 ```bash
-python3 -m http.server 8000
+BLOB_READ_WRITE_TOKEN=vercel_blob_rw_...
 ```
 
-Then visit `http://localhost:8000`.
+On Vercel, this is usually added automatically when you connect a Blob store to the project. Locally, put it in `.env.local`.
 
-## Notes
+## Local Development
 
-The tear effect uses Three.js planes, canvas-generated layer textures, alpha masks, mesh deformation, and a small spring simulation. The pointer pulls a softened tear head through the current layer while a lifted texture-mapped flap, WebGL lighting, shadows, torn masks, and paper grain create depth.
+```bash
+npm install
+npm run dev
+```
+
+Visit:
+
+- `http://localhost:3000` for the landing page
+- `http://localhost:3000/create` for the upload form
+- `http://localhost:3000/m/demo` for a local tearable share preview using the bundled sample images
+
+Creating a real Momentoria locally requires `BLOB_READ_WRITE_TOKEN`.
+
+## Checks
+
+```bash
+npm run typecheck
+npm run lint
+npm run build
+```
+
+## Deployment
+
+Deploy to Vercel as a standard Next.js project.
+
+1. Push this repo to GitHub.
+2. Import the repo in Vercel.
+3. Connect a Vercel Blob store.
+4. Confirm `BLOB_READ_WRITE_TOKEN` is present.
+5. Deploy.
+
+No accounts, payments, or email sending are included in this MVP.
