@@ -60,6 +60,7 @@ const state = {
   brush: 0.055,
   seam: [],
   tearPercent: 0,
+  peelTransition: null,
 };
 
 const flap = {
@@ -128,6 +129,8 @@ function makeLayer(source, index) {
     mesh,
     imageElement: null,
     hidden: false,
+    peeling: false,
+    peelStart: 0,
     basePositions: null,
   };
 }
@@ -283,6 +286,7 @@ function addVignette(ctx) {
 
 function resetMask(layer) {
   layer.hidden = false;
+  layer.peeling = false;
   layer.mesh.visible = true;
   layer.maskCtx.globalCompositeOperation = "source-over";
   layer.maskCtx.clearRect(0, 0, state.width, state.height);
@@ -298,7 +302,7 @@ function pointerFromEvent(event) {
 }
 
 function beginPointer(event) {
-  if (state.activeLayer >= state.layers.length - 1) return;
+  if (state.peelTransition || state.activeLayer >= state.layers.length - 1) return;
 
   const point = pointerFromEvent(event);
   state.pointers.set(event.pointerId, point);
@@ -349,6 +353,8 @@ function averagePointers() {
 
 function animate() {
   requestAnimationFrame(animate);
+
+  updatePeelTransition();
 
   if (state.tearing) {
     advanceSpring();
@@ -553,13 +559,77 @@ function maybeDropLayer() {
 
   state.tearPercent = estimateRevealed(layer);
   if (state.tearPercent > 0.35 || traveledSeamLength() > Math.max(state.width, state.height) * 1.2) {
-    layer.hidden = true;
-    layer.mesh.visible = false;
-    state.activeLayer += 1;
-    updateStatus();
+    startCenterPeel(layer);
   }
 
   resetGesture();
+}
+
+function startCenterPeel(layer) {
+  layer.peeling = true;
+  layer.peelStart = performance.now();
+  state.peelTransition = { layer, startedAt: layer.peelStart, duration: 1100 };
+  state.activeLayer += 1;
+  updateStatus();
+}
+
+function updatePeelTransition() {
+  const transition = state.peelTransition;
+  if (!transition) return;
+
+  const { layer, startedAt, duration } = transition;
+  const progress = clamp((performance.now() - startedAt) / duration, 0, 1);
+  const eased = easeInOutCubic(progress);
+  const cx = state.width / 2;
+  const cy = state.height / 2;
+  const radius = Math.hypot(state.width, state.height) * (0.08 + eased * 0.74);
+
+  layer.maskCtx.save();
+  layer.maskCtx.globalCompositeOperation = "destination-out";
+  const gradient = layer.maskCtx.createRadialGradient(cx, cy, radius * 0.62, cx, cy, radius);
+  gradient.addColorStop(0, "rgba(0, 0, 0, 0.72)");
+  gradient.addColorStop(1, "rgba(0, 0, 0, 0)");
+  layer.maskCtx.fillStyle = gradient;
+  layer.maskCtx.beginPath();
+  layer.maskCtx.arc(cx, cy, radius, 0, Math.PI * 2);
+  layer.maskCtx.fill();
+  layer.maskCtx.restore();
+  layer.maskTexture.needsUpdate = true;
+
+  peelMeshFromCenter(layer, eased);
+
+  if (progress >= 1) {
+    layer.peeling = false;
+    layer.hidden = true;
+    layer.mesh.visible = false;
+    state.peelTransition = null;
+    restoreMesh(layer);
+  }
+}
+
+function peelMeshFromCenter(layer, progress) {
+  if (!layer.basePositions) return;
+
+  const positions = layer.geometry.attributes.position.array;
+  const maxDistance = Math.hypot(state.worldWidth, state.worldHeight);
+  const opening = progress * maxDistance * 1.55;
+
+  for (let i = 0; i < positions.length; i += 3) {
+    const baseX = layer.basePositions[i];
+    const baseY = layer.basePositions[i + 1];
+    const distance = Math.hypot(baseX, baseY);
+    const local = clamp((opening - distance + 0.28) / 0.56, 0, 1);
+    const lift = local * local * (3 - 2 * local);
+    const dirX = distance > 0.001 ? baseX / distance : 0;
+    const dirY = distance > 0.001 ? baseY / distance : 0;
+
+    positions[i] = baseX + dirX * lift * progress * 0.18;
+    positions[i + 1] = baseY + dirY * lift * progress * 0.18;
+    positions[i + 2] = lift * (0.16 + progress * 0.5);
+  }
+
+  layer.geometry.attributes.position.needsUpdate = true;
+  layer.geometry.computeVertexNormals();
 }
 
 function estimateRevealed(layer) {
@@ -597,10 +667,13 @@ function resetGesture() {
   state.velocity.set(0, 0);
   canvas.classList.remove("is-tearing");
   hideFlap();
-  state.layers.forEach(restoreMesh);
+  state.layers.forEach((layer) => {
+    if (!layer.peeling) restoreMesh(layer);
+  });
 }
 
 function resetArtwork() {
+  state.peelTransition = null;
   state.activeLayer = 0;
   state.layers.forEach(resetMask);
   resetGesture();
@@ -618,6 +691,10 @@ function noise01(value) {
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+function easeInOutCubic(value) {
+  return value < 0.5 ? 4 * value ** 3 : 1 - Math.pow(-2 * value + 2, 3) / 2;
 }
 
 window.addEventListener("resize", resize);
