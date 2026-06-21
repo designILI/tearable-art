@@ -1,12 +1,12 @@
+import * as THREE from "https://unpkg.com/three@0.164.1/build/three.module.js";
+
 const canvas = document.querySelector("#artCanvas");
-const ctx = canvas.getContext("2d", { alpha: false });
 const resetButton = document.querySelector("#resetButton");
 const layerStatus = document.querySelector("#layerStatus");
 
 /*
-  Replace these placeholder entries with your artwork files later.
-  Example:
-  { image: "assets/layers/my-painting-01.jpg", name: "First painting" }
+  Replace these image paths with your own artwork files.
+  The first item is the top layer. The last item is the deepest layer.
 */
 const layerSources = [
   { image: "assets/layers/layer-01.jpg", palette: ["#d9c4a0", "#7c725f", "#1a1714"], name: "Linen dusk" },
@@ -16,199 +16,278 @@ const layerSources = [
   { image: "assets/layers/layer-05.jpg", palette: ["#c9ac8f", "#8a5743", "#160f0c"], name: "Clay ember" },
 ];
 
-const scratchCanvas = document.createElement("canvas");
-const scratchCtx = scratchCanvas.getContext("2d");
+const renderer = new THREE.WebGLRenderer({
+  canvas,
+  antialias: true,
+  alpha: false,
+  powerPreference: "high-performance",
+});
+renderer.setClearColor(0x0f0e0c, 1);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const scene = new THREE.Scene();
+const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 40);
+camera.position.set(0, 0, 10);
+camera.lookAt(0, 0, 0);
+
+scene.add(new THREE.AmbientLight(0xffffff, 1.25));
+
+const keyLight = new THREE.DirectionalLight(0xffffff, 1.9);
+keyLight.position.set(-2.5, 3.4, 7);
+keyLight.castShadow = true;
+keyLight.shadow.mapSize.set(1024, 1024);
+scene.add(keyLight);
+
+const sideLight = new THREE.DirectionalLight(0xbfdcff, 0.55);
+sideLight.position.set(4, -1, 4);
+scene.add(sideLight);
 
 const state = {
-  width: 0,
-  height: 0,
+  width: 1,
+  height: 1,
   dpr: 1,
+  worldWidth: 1,
+  worldHeight: 1,
   layers: [],
   activeLayer: 0,
   pointers: new Map(),
   tearing: false,
-  pointer: { x: 0, y: 0 },
-  head: { x: 0, y: 0 },
-  velocity: { x: 0, y: 0 },
+  pointer: new THREE.Vector2(),
+  head: new THREE.Vector2(),
+  velocity: new THREE.Vector2(),
   lastHead: null,
+  brush: 0.055,
   seam: [],
-  edgePoints: [],
-  brush: 42,
   tearPercent: 0,
-  animationId: null,
 };
+
+const flap = {
+  geometry: new THREE.BufferGeometry(),
+  material: new THREE.MeshStandardMaterial({
+    transparent: true,
+    opacity: 0.96,
+    side: THREE.DoubleSide,
+    roughness: 0.92,
+    metalness: 0,
+    depthWrite: false,
+  }),
+  mesh: null,
+};
+flap.mesh = new THREE.Mesh(flap.geometry, flap.material);
+flap.mesh.castShadow = true;
+flap.mesh.renderOrder = 20;
+flap.mesh.visible = false;
+scene.add(flap.mesh);
 
 function makeLayer(source, index) {
   const art = document.createElement("canvas");
   const mask = document.createElement("canvas");
+  const artCtx = art.getContext("2d");
+  const maskCtx = mask.getContext("2d");
+  const artTexture = new THREE.CanvasTexture(art);
+  const maskTexture = new THREE.CanvasTexture(mask);
+
+  for (const texture of [artTexture, maskTexture]) {
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.wrapS = THREE.ClampToEdgeWrapping;
+    texture.wrapT = THREE.ClampToEdgeWrapping;
+  }
+
+  const material = new THREE.MeshStandardMaterial({
+    map: artTexture,
+    alphaMap: maskTexture,
+    transparent: true,
+    alphaTest: 0.03,
+    side: THREE.DoubleSide,
+    roughness: 0.86,
+    metalness: 0,
+  });
+
+  const geometry = new THREE.PlaneGeometry(2, 2, 96, 64);
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.position.z = -index * 0.12;
+  mesh.receiveShadow = true;
+  mesh.castShadow = index === 0;
+  mesh.renderOrder = layerSources.length - index;
+  scene.add(mesh);
+
   return {
     ...source,
     index,
     art,
-    artCtx: art.getContext("2d"),
+    artCtx,
+    artTexture,
     mask,
-    maskCtx: mask.getContext("2d"),
+    maskCtx,
+    maskTexture,
+    material,
+    geometry,
+    mesh,
     imageElement: null,
     hidden: false,
+    basePositions: null,
   };
 }
 
 function setupLayers() {
   state.layers = layerSources.map(makeLayer);
-
   state.layers.forEach((layer) => {
-    if (!layer.image) return;
-
     const image = new Image();
     image.onload = () => {
       layer.imageElement = image;
       paintLayer(layer);
-      requestDraw();
+      render();
     };
     image.onerror = () => {
       layer.imageElement = null;
       paintLayer(layer);
-      requestDraw();
+      render();
     };
     image.src = layer.image;
   });
 }
 
-function resizeCanvas() {
+function resize() {
+  state.width = Math.max(1, window.innerWidth);
+  state.height = Math.max(1, window.innerHeight);
   state.dpr = Math.min(window.devicePixelRatio || 1, 2);
-  state.width = Math.floor(window.innerWidth);
-  state.height = Math.floor(window.innerHeight);
+  state.worldWidth = state.width / state.height >= 1 ? state.width / state.height : 1;
+  state.worldHeight = state.width / state.height >= 1 ? 1 : state.height / state.width;
 
-  for (const target of [canvas, scratchCanvas]) {
-    target.width = Math.floor(state.width * state.dpr);
-    target.height = Math.floor(state.height * state.dpr);
-  }
+  renderer.setPixelRatio(state.dpr);
+  renderer.setSize(state.width, state.height, false);
 
-  canvas.style.width = `${state.width}px`;
-  canvas.style.height = `${state.height}px`;
-  ctx.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
-  scratchCtx.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
+  camera.left = -state.worldWidth;
+  camera.right = state.worldWidth;
+  camera.top = state.worldHeight;
+  camera.bottom = -state.worldHeight;
+  camera.updateProjectionMatrix();
 
   state.layers.forEach((layer) => {
-    for (const target of [layer.art, layer.mask]) {
-      target.width = canvas.width;
-      target.height = canvas.height;
-    }
+    layer.art.width = Math.round(state.width * state.dpr);
+    layer.art.height = Math.round(state.height * state.dpr);
+    layer.mask.width = layer.art.width;
+    layer.mask.height = layer.art.height;
     layer.artCtx.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
     layer.maskCtx.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
+
+    layer.geometry.dispose();
+    layer.geometry = new THREE.PlaneGeometry(state.worldWidth * 2, state.worldHeight * 2, 112, 72);
+    layer.mesh.geometry = layer.geometry;
+    layer.basePositions = layer.geometry.attributes.position.array.slice();
+
     paintLayer(layer);
     resetMask(layer);
   });
 
   resetGesture();
-  requestDraw();
+  render();
 }
 
 function paintLayer(layer) {
-  const layerCtx = layer.artCtx;
-  layerCtx.clearRect(0, 0, state.width, state.height);
+  const ctx = layer.artCtx;
+  ctx.clearRect(0, 0, state.width, state.height);
 
   if (layer.imageElement) {
-    drawImageCover(layerCtx, layer.imageElement, state.width, state.height);
+    drawImageCover(ctx, layer.imageElement, state.width, state.height);
   } else {
-    paintPlaceholder(layer);
+    paintPlaceholder(ctx, layer);
   }
 
-  addPaperFibers(layerCtx, layer.index);
-  addVignette(layerCtx);
+  addPaperFibers(ctx, layer.index);
+  addVignette(ctx);
+  layer.artTexture.needsUpdate = true;
 }
 
-function paintPlaceholder(layer) {
+function paintPlaceholder(ctx, layer) {
   const [light, mid, dark] = layer.palette;
-  const gradient = layer.artCtx.createLinearGradient(0, 0, state.width, state.height);
+  const gradient = ctx.createLinearGradient(0, 0, state.width, state.height);
   gradient.addColorStop(0, light);
-  gradient.addColorStop(0.46, mid);
+  gradient.addColorStop(0.48, mid);
   gradient.addColorStop(1, dark);
-  layer.artCtx.fillStyle = gradient;
-  layer.artCtx.fillRect(0, 0, state.width, state.height);
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, state.width, state.height);
 
-  layer.artCtx.save();
-  layer.artCtx.globalAlpha = 0.34;
+  ctx.save();
+  ctx.globalAlpha = 0.32;
   for (let i = 0; i < 18; i += 1) {
     const x = state.width * noise01(i * 13.71 + layer.index * 7.9);
     const y = state.height * noise01(i * 5.31 + layer.index * 11.4);
     const radius = Math.max(state.width, state.height) * (0.12 + noise01(i * 19.1) * 0.18);
-    const wash = layer.artCtx.createRadialGradient(x, y, 0, x, y, radius);
+    const wash = ctx.createRadialGradient(x, y, 0, x, y, radius);
     wash.addColorStop(0, "rgba(255, 250, 235, 0.42)");
     wash.addColorStop(1, "rgba(255, 250, 235, 0)");
-    layer.artCtx.fillStyle = wash;
-    layer.artCtx.beginPath();
-    layer.artCtx.arc(x, y, radius, 0, Math.PI * 2);
-    layer.artCtx.fill();
+    ctx.fillStyle = wash;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
   }
-  layer.artCtx.restore();
-
-  layer.artCtx.save();
-  layer.artCtx.globalAlpha = 0.22;
-  layer.artCtx.strokeStyle = "#fff7e6";
-  layer.artCtx.lineWidth = 1;
-  for (let i = 0; i < 42; i += 1) {
-    const y = (state.height / 41) * i;
-    layer.artCtx.beginPath();
-    layer.artCtx.moveTo(-40, y);
-    for (let x = -40; x < state.width + 80; x += 52) {
-      const lift = Math.sin(x * 0.011 + i * 0.77 + layer.index) * 9;
-      layer.artCtx.lineTo(x, y + lift);
-    }
-    layer.artCtx.stroke();
-  }
-  layer.artCtx.restore();
+  ctx.restore();
 }
 
-function drawImageCover(targetCtx, image, width, height) {
+function drawImageCover(ctx, image, width, height) {
   const scale = Math.max(width / image.naturalWidth, height / image.naturalHeight);
   const drawWidth = image.naturalWidth * scale;
   const drawHeight = image.naturalHeight * scale;
-  targetCtx.drawImage(image, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
+  ctx.drawImage(image, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
 }
 
-function addPaperFibers(targetCtx, seed) {
-  targetCtx.save();
-  targetCtx.globalAlpha = 0.06;
-  for (let i = 0; i < 7000; i += 1) {
+function addPaperFibers(ctx, seed) {
+  ctx.save();
+  ctx.globalAlpha = 0.075;
+  ctx.strokeStyle = "rgba(255, 248, 230, 0.48)";
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 42; i += 1) {
+    const y = (state.height / 41) * i;
+    ctx.beginPath();
+    ctx.moveTo(-40, y);
+    for (let x = -40; x < state.width + 80; x += 48) {
+      ctx.lineTo(x, y + Math.sin(x * 0.011 + i * 0.77 + seed) * 8);
+    }
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 0.055;
+  for (let i = 0; i < 6000; i += 1) {
     const x = noise01(i * 16.93 + seed * 40.1) * state.width;
     const y = noise01(i * 8.17 + seed * 91.4) * state.height;
-    const warm = 205 + Math.floor(noise01(i + seed) * 50);
-    targetCtx.fillStyle = `rgba(${warm}, ${warm - 8}, ${warm - 24}, 0.45)`;
-    targetCtx.fillRect(x, y, 1, noise01(i * 0.41) > 0.72 ? 2 : 1);
+    ctx.fillStyle = "rgba(255, 248, 230, 0.52)";
+    ctx.fillRect(x, y, 1, noise01(i * 0.41) > 0.72 ? 2 : 1);
   }
-  targetCtx.restore();
+  ctx.restore();
 }
 
-function addVignette(targetCtx) {
-  const gradient = targetCtx.createRadialGradient(
+function addVignette(ctx) {
+  const gradient = ctx.createRadialGradient(
     state.width / 2,
     state.height / 2,
     Math.min(state.width, state.height) * 0.18,
     state.width / 2,
     state.height / 2,
-    Math.max(state.width, state.height) * 0.74,
+    Math.max(state.width, state.height) * 0.75,
   );
   gradient.addColorStop(0, "rgba(0, 0, 0, 0)");
-  gradient.addColorStop(1, "rgba(0, 0, 0, 0.38)");
-  targetCtx.fillStyle = gradient;
-  targetCtx.fillRect(0, 0, state.width, state.height);
+  gradient.addColorStop(1, "rgba(0, 0, 0, 0.36)");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, state.width, state.height);
 }
 
 function resetMask(layer) {
   layer.hidden = false;
+  layer.mesh.visible = true;
   layer.maskCtx.globalCompositeOperation = "source-over";
   layer.maskCtx.clearRect(0, 0, state.width, state.height);
   layer.maskCtx.fillStyle = "#fff";
   layer.maskCtx.fillRect(0, 0, state.width, state.height);
+  layer.maskTexture.needsUpdate = true;
+  restoreMesh(layer);
 }
 
 function pointerFromEvent(event) {
   const rect = canvas.getBoundingClientRect();
-  return {
-    x: event.clientX - rect.left,
-    y: event.clientY - rect.top,
-  };
+  return new THREE.Vector2(event.clientX - rect.left, event.clientY - rect.top);
 }
 
 function beginPointer(event) {
@@ -216,180 +295,237 @@ function beginPointer(event) {
 
   const point = pointerFromEvent(event);
   state.pointers.set(event.pointerId, point);
-  state.pointer = averagePointers();
-  state.head = { ...state.pointer };
-  state.velocity = { x: 0, y: 0 };
+  state.pointer.copy(averagePointers());
+  state.head.copy(state.pointer);
+  state.velocity.set(0, 0);
   state.lastHead = null;
   state.seam = [];
-  state.edgePoints = [];
   state.tearing = true;
-  state.brush = clamp(Math.min(state.width, state.height) * 0.055, 28, 58);
+  state.brush = clamp(Math.min(state.width, state.height) * 0.075, 44, 96);
   canvas.classList.add("is-tearing");
   canvas.setPointerCapture(event.pointerId);
-  requestDraw();
 }
 
 function movePointer(event) {
   if (!state.pointers.has(event.pointerId)) return;
   state.pointers.set(event.pointerId, pointerFromEvent(event));
-  state.pointer = averagePointers();
+  state.pointer.copy(averagePointers());
 
-  // Pointer streams can arrive faster than paint frames, especially in tests
-  // and on high-refresh devices. Advance a couple of physics steps here so
-  // the tear follows fast gestures instead of waiting for the next frame.
-  if (state.tearing) {
+  for (let i = 0; i < 3; i += 1) {
     advanceSpring();
     carveBetweenHeads();
-    advanceSpring();
-    carveBetweenHeads();
-    requestDraw();
   }
 }
 
 function endPointer(event) {
   state.pointers.delete(event.pointerId);
-  if (state.pointers.size > 0) {
-    state.pointer = averagePointers();
+  if (state.pointers.size) {
+    state.pointer.copy(averagePointers());
     return;
   }
 
-  state.tearing = false;
-  for (let i = 0; i < 8; i += 1) {
+  for (let i = 0; i < 10; i += 1) {
     advanceSpring();
     carveBetweenHeads();
-    if (Math.hypot(state.pointer.x - state.head.x, state.pointer.y - state.head.y) < 6) break;
   }
+  state.tearing = false;
   canvas.classList.remove("is-tearing");
   maybeDropLayer();
-  requestDraw();
+  hideFlap();
 }
 
 function averagePointers() {
-  let x = 0;
-  let y = 0;
-  state.pointers.forEach((point) => {
-    x += point.x;
-    y += point.y;
-  });
-  return {
-    x: x / state.pointers.size,
-    y: y / state.pointers.size,
-  };
+  const point = new THREE.Vector2();
+  state.pointers.forEach((value) => point.add(value));
+  return point.divideScalar(state.pointers.size || 1);
 }
 
-function animationLoop() {
-  state.animationId = null;
+function animate() {
+  requestAnimationFrame(animate);
 
   if (state.tearing) {
     advanceSpring();
     carveBetweenHeads();
   }
 
-  drawScene();
-
-  if (state.tearing) requestDraw();
+  deformActiveMesh();
+  updateFlap();
+  render();
 }
 
-function requestDraw() {
-  if (state.animationId) return;
-  state.animationId = requestAnimationFrame(animationLoop);
+function render() {
+  renderer.render(scene, camera);
 }
 
 function advanceSpring() {
-  const stiffness = 0.23;
-  const damping = 0.72;
-  const dx = state.pointer.x - state.head.x;
-  const dy = state.pointer.y - state.head.y;
-
-  state.velocity.x = (state.velocity.x + dx * stiffness) * damping;
-  state.velocity.y = (state.velocity.y + dy * stiffness) * damping;
-  state.head.x += state.velocity.x;
-  state.head.y += state.velocity.y;
-
-  const speed = Math.hypot(state.velocity.x, state.velocity.y);
-  state.brush = clamp(state.brush * 0.84 + (32 + Math.min(speed * 1.1, 42)) * 0.16, 26, 76);
+  const pull = state.pointer.clone().sub(state.head).multiplyScalar(0.18);
+  state.velocity.add(pull).multiplyScalar(0.72);
+  state.head.add(state.velocity);
+  const speed = state.velocity.length();
+  state.brush = clamp(state.brush * 0.84 + (48 + Math.min(speed * 1.2, 58)) * 0.16, 40, 108);
 }
 
 function carveBetweenHeads() {
+  const layer = state.layers[state.activeLayer];
+  if (!layer || !state.tearing) return;
+
   if (!state.lastHead) {
-    state.lastHead = { ...state.head };
-    cutOrganicHole(state.head, state.brush * 0.55);
+    state.lastHead = state.head.clone();
+    cutOrganicHole(layer, state.head, state.brush * 0.5);
     return;
   }
 
-  const distance = Math.hypot(state.head.x - state.lastHead.x, state.head.y - state.lastHead.y);
-  const steps = Math.max(1, Math.ceil(distance / 7));
-
+  const distance = state.head.distanceTo(state.lastHead);
+  const steps = Math.max(1, Math.ceil(distance / 6));
   for (let i = 1; i <= steps; i += 1) {
-    const t = i / steps;
-    const point = {
-      x: lerp(state.lastHead.x, state.head.x, t),
-      y: lerp(state.lastHead.y, state.head.y, t),
-    };
-    cutOrganicHole(point, state.brush * (0.72 + noise01(point.x * 0.02 + point.y * 0.01) * 0.42));
-    addSeamPoint(point);
+    const point = state.lastHead.clone().lerp(state.head, i / steps);
+    const radius = state.brush * (0.68 + noise01(point.x * 0.02 + point.y * 0.013) * 0.36);
+    cutOrganicHole(layer, point, radius);
+    addSeamPoint(point, radius);
   }
-
-  state.lastHead = { ...state.head };
+  state.lastHead.copy(state.head);
+  layer.maskTexture.needsUpdate = true;
 }
 
-function cutOrganicHole(point, radius) {
-  const layer = state.layers[state.activeLayer];
-  const maskCtx = layer.maskCtx;
-  const count = 22;
+function cutOrganicHole(layer, point, radius) {
+  const ctx = layer.maskCtx;
+  const count = 24;
 
-  maskCtx.save();
-  maskCtx.globalCompositeOperation = "destination-out";
-  maskCtx.beginPath();
-
+  ctx.save();
+  ctx.globalCompositeOperation = "destination-out";
+  ctx.beginPath();
   for (let i = 0; i <= count; i += 1) {
     const angle = (Math.PI * 2 * i) / count;
-    const wobble = 0.7 + noise01(point.x * 0.021 + point.y * 0.017 + i * 1.7) * 0.7;
-    const r = radius * wobble;
-    const x = point.x + Math.cos(angle) * r;
-    const y = point.y + Math.sin(angle) * r;
-    if (i === 0) maskCtx.moveTo(x, y);
-    else maskCtx.lineTo(x, y);
+    const wobble = 0.62 + noise01(point.x * 0.019 + point.y * 0.027 + i * 1.71) * 0.82;
+    const x = point.x + Math.cos(angle) * radius * wobble;
+    const y = point.y + Math.sin(angle) * radius * wobble;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
   }
+  ctx.closePath();
+  ctx.fill();
 
-  maskCtx.closePath();
-  maskCtx.fill();
-
-  maskCtx.globalAlpha = 0.42;
-  maskCtx.lineCap = "round";
-  maskCtx.lineJoin = "round";
-  maskCtx.lineWidth = radius * 0.52;
-  maskCtx.strokeStyle = "#000";
-  maskCtx.beginPath();
-  maskCtx.moveTo(point.x - radius * 0.28, point.y);
-  maskCtx.lineTo(point.x + radius * 0.28, point.y);
-  maskCtx.stroke();
-  maskCtx.restore();
-
-  state.edgePoints.push({
-    x: point.x,
-    y: point.y,
-    r: radius,
-    n: noise01(point.x * 0.033 + point.y * 0.027),
-  });
-  if (state.edgePoints.length > 260) state.edgePoints.splice(0, state.edgePoints.length - 260);
+  ctx.globalAlpha = 0.5;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.lineWidth = radius * 0.72;
+  ctx.strokeStyle = "#000";
+  ctx.beginPath();
+  ctx.moveTo(point.x - radius * 0.35, point.y);
+  ctx.lineTo(point.x + radius * 0.35, point.y);
+  ctx.stroke();
+  ctx.restore();
 }
 
-function addSeamPoint(point) {
+function addSeamPoint(point, radius) {
   const previous = state.seam[state.seam.length - 1] || point;
   const dx = point.x - previous.x;
   const dy = point.y - previous.y;
   const length = Math.hypot(dx, dy) || 1;
-  const jitter = (noise01(point.x * 0.04 + point.y * 0.03) - 0.5) * state.brush * 0.45;
+  const jitter = (noise01(point.x * 0.04 + point.y * 0.03) - 0.5) * radius * 0.55;
 
   state.seam.push({
     x: point.x + (-dy / length) * jitter,
     y: point.y + (dx / length) * jitter,
-    width: state.brush * (0.85 + noise01(point.x * 0.015) * 0.55),
-    age: 0,
+    radius,
   });
 
-  if (state.seam.length > 90) state.seam.splice(0, state.seam.length - 90);
+  if (state.seam.length > 120) state.seam.splice(0, state.seam.length - 120);
+}
+
+function deformActiveMesh() {
+  const layer = state.layers[state.activeLayer];
+  if (!layer || !layer.basePositions) return;
+
+  const positions = layer.geometry.attributes.position.array;
+  const head = screenToWorld(state.head.x, state.head.y);
+  const pointer = screenToWorld(state.pointer.x, state.pointer.y);
+  const pull = pointer.clone().sub(head);
+  const radius = state.brush * (state.worldWidth * 2 / state.width) * 4.2;
+
+  for (let i = 0; i < positions.length; i += 3) {
+    const baseX = layer.basePositions[i];
+    const baseY = layer.basePositions[i + 1];
+    const dx = baseX - head.x;
+    const dy = baseY - head.y;
+    const distance = Math.hypot(dx, dy);
+    const influence = Math.max(0, 1 - distance / radius);
+    const ease = influence * influence * (3 - 2 * influence);
+
+    positions[i] = baseX + pull.x * ease * 0.18;
+    positions[i + 1] = baseY + pull.y * ease * 0.18;
+    positions[i + 2] = Math.sin(ease * Math.PI) * 0.18 + ease * 0.08;
+  }
+
+  layer.geometry.attributes.position.needsUpdate = true;
+  layer.geometry.computeVertexNormals();
+}
+
+function restoreMesh(layer) {
+  if (!layer.basePositions) return;
+  layer.geometry.attributes.position.array.set(layer.basePositions);
+  layer.geometry.attributes.position.needsUpdate = true;
+  layer.geometry.computeVertexNormals();
+}
+
+function updateFlap() {
+  const layer = state.layers[state.activeLayer];
+  if (!state.tearing || !layer || state.seam.length < 4) {
+    hideFlap();
+    return;
+  }
+
+  const path = state.seam.slice(-46);
+  const normal = recentNormal(path);
+  const speed = state.velocity.length();
+  const lift = clamp(speed * 0.006 + 0.08, 0.09, 0.34);
+  const positions = [];
+  const uvs = [];
+  const indices = [];
+
+  path.forEach((point, index) => {
+    const world = screenToWorld(point.x, point.y);
+    const width = (point.radius / state.width) * state.worldWidth * 2;
+    const curl = Math.sin((index / Math.max(1, path.length - 1)) * Math.PI) * lift;
+    const rough = (noise01(point.x * 0.071 + point.y * 0.083) - 0.5) * width * 0.55;
+
+    const inner = world.clone().addScaledVector(normal, -width * 0.38 + rough * 0.2);
+    const outer = world.clone().addScaledVector(normal, width * 0.75 + curl + rough);
+    const z = 0.34 + Math.sin(index * 0.45) * 0.018;
+
+    positions.push(inner.x, inner.y, z * 0.45, outer.x, outer.y, z + curl * 0.55);
+    uvs.push(point.x / state.width, 1 - point.y / state.height, point.x / state.width, 1 - point.y / state.height);
+
+    if (index < path.length - 1) {
+      const a = index * 2;
+      indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+    }
+  });
+
+  flap.geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  flap.geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  flap.geometry.setIndex(indices);
+  flap.geometry.computeVertexNormals();
+  flap.material.map = layer.artTexture;
+  flap.material.needsUpdate = true;
+  flap.mesh.visible = true;
+}
+
+function hideFlap() {
+  flap.mesh.visible = false;
+}
+
+function recentNormal(path) {
+  const first = screenToWorld(path[0].x, path[0].y);
+  const last = screenToWorld(path[path.length - 1].x, path[path.length - 1].y);
+  const direction = last.clone().sub(first);
+  if (direction.lengthSq() < 0.0001) return new THREE.Vector2(0, 1);
+  direction.normalize();
+
+  const normal = new THREE.Vector2(-direction.y, direction.x);
+  const toPointer = screenToWorld(state.pointer.x, state.pointer.y).sub(last);
+  if (normal.dot(toPointer) < 0) normal.multiplyScalar(-1);
+  return normal;
 }
 
 function maybeDropLayer() {
@@ -400,8 +536,9 @@ function maybeDropLayer() {
   }
 
   state.tearPercent = estimateRevealed(layer);
-  if (state.tearPercent > 0.38 || traveledSeamLength() > Math.max(state.width, state.height) * 1.15) {
+  if (state.tearPercent > 0.35 || traveledSeamLength() > Math.max(state.width, state.height) * 1.2) {
     layer.hidden = true;
+    layer.mesh.visible = false;
     state.activeLayer += 1;
     updateStatus();
   }
@@ -410,18 +547,15 @@ function maybeDropLayer() {
 }
 
 function estimateRevealed(layer) {
-  const sampleSize = 90;
-  const data = layer.maskCtx.getImageData(0, 0, canvas.width, canvas.height).data;
-  let transparent = 0;
-  let samples = 0;
-  const stride = Math.max(1, Math.floor((canvas.width * canvas.height) / sampleSize ** 2));
-
+  const data = layer.maskCtx.getImageData(0, 0, layer.mask.width, layer.mask.height).data;
+  const stride = Math.max(1, Math.floor((layer.mask.width * layer.mask.height) / 9000));
+  let clear = 0;
+  let total = 0;
   for (let i = 3; i < data.length; i += 4 * stride) {
-    samples += 1;
-    if (data[i] < 20) transparent += 1;
+    total += 1;
+    if (data[i] < 20) clear += 1;
   }
-
-  return samples ? transparent / samples : 0;
+  return total ? clear / total : 0;
 }
 
 function traveledSeamLength() {
@@ -432,132 +566,11 @@ function traveledSeamLength() {
   return total;
 }
 
-function drawScene() {
-  ctx.clearRect(0, 0, state.width, state.height);
-  ctx.fillStyle = "#0f0e0c";
-  ctx.fillRect(0, 0, state.width, state.height);
-
-  for (let i = state.layers.length - 1; i >= 0; i -= 1) {
-    const layer = state.layers[i];
-    if (layer.hidden) continue;
-
-    scratchCtx.clearRect(0, 0, state.width, state.height);
-    scratchCtx.globalCompositeOperation = "source-over";
-    scratchCtx.drawImage(layer.art, 0, 0, state.width, state.height);
-    scratchCtx.globalCompositeOperation = "destination-in";
-    scratchCtx.drawImage(layer.mask, 0, 0, state.width, state.height);
-    scratchCtx.globalCompositeOperation = "source-over";
-    ctx.drawImage(scratchCanvas, 0, 0, state.width, state.height);
-
-    if (i === state.activeLayer && i < state.layers.length - 1) {
-      drawTornEdge();
-      if (state.tearing) drawLiftedFlap(layer);
-    }
-  }
-}
-
-function drawTornEdge() {
-  if (!state.edgePoints.length) return;
-
-  ctx.save();
-  for (const point of state.edgePoints) {
-    const alpha = 0.05 + point.n * 0.09;
-    ctx.fillStyle = `rgba(0, 0, 0, ${alpha})`;
-    ctx.beginPath();
-    ctx.ellipse(point.x + 7, point.y + 10, point.r * 0.74, point.r * 0.42, point.n * Math.PI, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = `rgba(255, 244, 220, ${0.08 + point.n * 0.08})`;
-    ctx.beginPath();
-    ctx.ellipse(point.x - 2, point.y - 2, point.r * 0.18, point.r * 0.1, point.n * Math.PI, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.restore();
-}
-
-function drawLiftedFlap(layer) {
-  if (state.seam.length < 3) return;
-
-  const path = state.seam.slice(-34);
-  const normal = getRecentNormal(path);
-  const lift = clamp(Math.hypot(state.velocity.x, state.velocity.y) * 1.8 + 30, 34, 115);
-  const left = [];
-  const right = [];
-
-  path.forEach((point, index) => {
-    const curl = Math.sin((index / Math.max(1, path.length - 1)) * Math.PI) * lift;
-    const rough = (noise01(point.x * 0.08 + point.y * 0.06) - 0.5) * point.width * 0.55;
-    left.push({
-      x: point.x - normal.x * (point.width * 0.4 + rough),
-      y: point.y - normal.y * (point.width * 0.4 + rough),
-    });
-    right.push({
-      x: point.x + normal.x * (point.width * 0.38 + curl),
-      y: point.y + normal.y * (point.width * 0.38 + curl),
-    });
-  });
-
-  ctx.save();
-  ctx.shadowColor = "rgba(0, 0, 0, 0.34)";
-  ctx.shadowBlur = 34;
-  ctx.shadowOffsetX = normal.x * 18;
-  ctx.shadowOffsetY = normal.y * 22;
-  ctx.fillStyle = "rgba(255, 246, 224, 0.48)";
-  tracePolygon(left, right);
-  ctx.fill();
-  ctx.restore();
-
-  ctx.save();
-  tracePolygon(left, right);
-  ctx.clip();
-  ctx.globalAlpha = 0.96;
-  ctx.translate(normal.x * lift * 0.22, normal.y * lift * 0.22);
-  ctx.rotate((normal.x - normal.y) * 0.015);
-  ctx.drawImage(layer.art, 0, 0, state.width, state.height);
-  ctx.globalCompositeOperation = "source-atop";
-  ctx.fillStyle = "rgba(255, 244, 222, 0.18)";
-  ctx.fillRect(0, 0, state.width, state.height);
-  ctx.restore();
-
-  ctx.save();
-  ctx.strokeStyle = "rgba(255, 249, 235, 0.42)";
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  left.forEach((point, index) => {
-    if (index === 0) ctx.moveTo(point.x, point.y);
-    else ctx.lineTo(point.x, point.y);
-  });
-  ctx.stroke();
-  ctx.restore();
-}
-
-function tracePolygon(left, right) {
-  ctx.beginPath();
-  left.forEach((point, index) => {
-    if (index === 0) ctx.moveTo(point.x, point.y);
-    else ctx.lineTo(point.x, point.y);
-  });
-  for (let i = right.length - 1; i >= 0; i -= 1) {
-    ctx.lineTo(right[i].x, right[i].y);
-  }
-  ctx.closePath();
-}
-
-function getRecentNormal(path) {
-  const first = path[0];
-  const last = path[path.length - 1];
-  const dx = last.x - first.x;
-  const dy = last.y - first.y;
-  const length = Math.hypot(dx, dy) || 1;
-  let normal = { x: -dy / length, y: dx / length };
-  const toPointer = {
-    x: state.pointer.x - last.x,
-    y: state.pointer.y - last.y,
-  };
-  if (normal.x * toPointer.x + normal.y * toPointer.y < 0) {
-    normal = { x: -normal.x, y: -normal.y };
-  }
-  return normal;
+function screenToWorld(x, y) {
+  return new THREE.Vector2(
+    (x / state.width - 0.5) * state.worldWidth * 2,
+    (0.5 - y / state.height) * state.worldHeight * 2,
+  );
 }
 
 function resetGesture() {
@@ -565,9 +578,10 @@ function resetGesture() {
   state.pointers.clear();
   state.lastHead = null;
   state.seam = [];
-  state.edgePoints = [];
-  state.velocity = { x: 0, y: 0 };
+  state.velocity.set(0, 0);
   canvas.classList.remove("is-tearing");
+  hideFlap();
+  state.layers.forEach(restoreMesh);
 }
 
 function resetArtwork() {
@@ -575,7 +589,6 @@ function resetArtwork() {
   state.layers.forEach(resetMask);
   resetGesture();
   updateStatus();
-  requestDraw();
 }
 
 function updateStatus() {
@@ -583,22 +596,15 @@ function updateStatus() {
 }
 
 function noise01(value) {
-  return fract(Math.sin(value * 127.1 + 311.7) * 43758.5453123);
-}
-
-function fract(value) {
-  return value - Math.floor(value);
-}
-
-function lerp(a, b, t) {
-  return a + (b - a) * t;
+  const result = Math.sin(value * 127.1 + 311.7) * 43758.5453123;
+  return result - Math.floor(result);
 }
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
-window.addEventListener("resize", resizeCanvas);
+window.addEventListener("resize", resize);
 canvas.addEventListener("pointerdown", beginPointer);
 canvas.addEventListener("pointermove", movePointer);
 canvas.addEventListener("pointerup", endPointer);
@@ -606,4 +612,5 @@ canvas.addEventListener("pointercancel", endPointer);
 resetButton.addEventListener("click", resetArtwork);
 
 setupLayers();
-resizeCanvas();
+resize();
+animate();

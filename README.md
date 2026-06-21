@@ -6,7 +6,7 @@ An elegant, single-page layered artwork. Visitors drag across the surface to tea
 
 - `index.html` contains the page structure and small overlay UI.
 - `styles.css` controls typography, layout, and the minimal interface.
-- `script.js` draws the artwork layers and handles mouse/touch tearing.
+- `script.js` builds the WebGL paper scene and handles mouse/touch tearing.
 - `assets/layers/` is where your final art images should go.
 
 ## Replacing the Placeholder Art
@@ -47,7 +47,7 @@ Images are automatically scaled to cover the full screen, so large landscape ima
 
 ## Running Locally
 
-Open `index.html` in a browser, or serve the folder with any simple local server.
+Serve the folder with any simple local server. The page imports Three.js as an ES module, so a local server is more reliable than opening the file directly.
 
 For example:
 
@@ -59,4 +59,4 @@ Then visit `http://localhost:8000`.
 
 ## Notes
 
-The tear effect is generated with canvas masks and a small spring simulation. The pointer pulls a softened tear head, which cuts an irregular seam through the current layer while a temporary lifted flap, torn-edge highlights, shadows, and paper grain create depth.
+The tear effect uses Three.js planes, canvas-generated layer textures, alpha masks, mesh deformation, and a small spring simulation. The pointer pulls a softened tear head through the current layer while a lifted texture-mapped flap, WebGL lighting, shadows, torn masks, and paper grain create depth.
