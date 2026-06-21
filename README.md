@@ -15,11 +15,21 @@ An elegant, single-page layered artwork. Visitors drag across the surface to tea
 
    Recommended formats: `.jpg`, `.png`, or `.webp`.
 
-2. Open `script.js`.
+2. Name them:
 
-3. Find the `layerSources` list near the top of the file.
+   - `layer-01.jpg`
+   - `layer-02.jpg`
+   - `layer-03.jpg`
+   - `layer-04.jpg`
+   - `layer-05.jpg`
 
-4. Replace the placeholder entries with your image paths:
+The site is already wired to use those filenames. If a file is missing, that layer falls back to its CSS/canvas placeholder.
+
+3. If you want different filenames, open `script.js`.
+
+4. Find the `layerSources` list near the top of the file.
+
+5. Replace the image paths:
 
    ```js
    const layerSources = [
@@ -49,4 +59,4 @@ Then visit `http://localhost:8000`.
 
 ## Notes
 
-The tear effect is generated with a canvas mask. It uses irregular brush shapes, soft cutouts, paper grain, and edge shadows to keep the motion organic while staying easy to customize.
+The tear effect is generated with canvas masks and a small spring simulation. The pointer pulls a softened tear head, which cuts an irregular seam through the current layer while a temporary lifted flap, torn-edge highlights, shadows, and paper grain create depth.
