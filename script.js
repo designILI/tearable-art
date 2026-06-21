@@ -9,11 +9,11 @@ const layerStatus = document.querySelector("#layerStatus");
   The first item is the top layer. The last item is the deepest layer.
 */
 const layerSources = [
-  { image: "assets/layers/layer-01.jpg", palette: ["#d9c4a0", "#7c725f", "#1a1714"], name: "Linen dusk" },
-  { image: "assets/layers/layer-02.jpg", palette: ["#9fc9ca", "#4f7f84", "#111f24"], name: "Blue mineral" },
-  { image: "assets/layers/layer-03.jpg", palette: ["#d7b2bc", "#965f70", "#24141b"], name: "Rose wash" },
-  { image: "assets/layers/layer-04.jpg", palette: ["#becb90", "#65764d", "#141b13"], name: "Olive field" },
-  { image: "assets/layers/layer-05.jpg", palette: ["#c9ac8f", "#8a5743", "#160f0c"], name: "Clay ember" },
+  { image: "assets/layers/layer-01.jpeg", palette: ["#d9c4a0", "#7c725f", "#1a1714"], name: "Linen dusk" },
+  { image: "assets/layers/layer-02.jpeg", palette: ["#9fc9ca", "#4f7f84", "#111f24"], name: "Blue mineral" },
+  { image: "assets/layers/layer-03.jpeg", palette: ["#d7b2bc", "#965f70", "#24141b"], name: "Rose wash" },
+  { image: "assets/layers/layer-04.jpeg", palette: ["#becb90", "#65764d", "#141b13"], name: "Olive field" },
+  { image: "assets/layers/layer-05.jpeg", palette: ["#c9ac8f", "#8a5743", "#160f0c"], name: "Clay ember" },
 ];
 
 const renderer = new THREE.WebGLRenderer({
