@@ -8,7 +8,7 @@ const layerLabels = ["Top layer", "Layer 2", "Layer 3", "Layer 4", "Final layer"
 
 type BlobStatus = "checking" | "connected" | "missing";
 
-const UPLOAD_TIMEOUT_MS = 90_000;
+const UPLOAD_TIMEOUT_MS = 180_000;
 
 export function CreateMomentoriaForm() {
   const [files, setFiles] = useState<File[]>([]);
@@ -106,7 +106,7 @@ export function CreateMomentoriaForm() {
         const uploadFile = await prepareImageForUpload(file);
         const extension = cleanFileName(uploadFile.name).split(".").pop() || "jpg";
 
-        setUploadStatus(`Uploading image ${index + 1} of ${files.length}...`);
+        setUploadStatus(`Uploading image ${index + 1} of ${files.length} (${formatFileSize(uploadFile.size)})...`);
         setUploadProgress(Math.round((index / files.length) * 100));
 
         const abortController = new AbortController();
@@ -136,7 +136,7 @@ export function CreateMomentoriaForm() {
           setUploadProgress(Math.round(((index + 1) / files.length) * 100));
         } catch (uploadError) {
           if (abortController.signal.aborted) {
-            throw new Error(`Image ${index + 1} took too long to upload. Try smaller JPG or WebP images, then submit again.`);
+            throw new Error(`Image ${index + 1} took too long to upload. The photo was compressed first, so this may be a slow network or Blob service issue. Try again in a minute.`);
           }
 
           throw uploadError;
@@ -332,10 +332,10 @@ function cleanFileName(name: string) {
 }
 
 async function prepareImageForUpload(file: File) {
-  const maxDimension = 1800;
-  const jpegQuality = 0.82;
+  const maxDimension = 1200;
+  const jpegQuality = 0.68;
 
-  if (file.size <= 1.8 * 1024 * 1024 || !file.type.startsWith("image/") || file.type === "image/gif") {
+  if (!file.type.startsWith("image/") || file.type === "image/gif") {
     return file;
   }
 
@@ -354,7 +354,7 @@ async function prepareImageForUpload(file: File) {
     context.drawImage(image, 0, 0, width, height);
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", jpegQuality));
 
-    if (!blob || blob.size >= file.size) return file;
+    if (!blob) return file;
 
     return new File([blob], `${cleanFileName(file.name).replace(/\.[a-z0-9]+$/i, "") || "image"}.jpg`, {
       type: "image/jpeg",
@@ -380,4 +380,9 @@ function loadImage(file: File) {
     };
     image.src = url;
   });
+}
+
+function formatFileSize(bytes: number) {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
