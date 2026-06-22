@@ -1,9 +1,6 @@
-import { put } from "@vercel/blob";
 import { NextResponse } from "next/server";
 import {
-  cleanFileName,
   cleanText,
-  makeMomentoriaId,
   saveMomentoriaMetadata,
   type MomentoriaMetadata,
 } from "@/lib/momentoria";
@@ -12,11 +9,19 @@ export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try {
-    const formData = await request.formData();
-    const title = cleanText(formData.get("title"), 80);
-    const message = cleanText(formData.get("message"), 220);
-    const recipientName = cleanText(formData.get("recipientName"), 60);
-    const images = formData.getAll("images").filter((file): file is File => file instanceof File && file.size > 0);
+    const body = (await request.json()) as {
+      id?: string;
+      title?: string;
+      message?: string;
+      recipientName?: string;
+      imageUrls?: string[];
+    };
+
+    const id = String(body.id ?? "");
+    const title = cleanText(body.title ?? "", 80);
+    const message = cleanText(body.message ?? "", 220);
+    const recipientName = cleanText(body.recipientName ?? "", 60);
+    const imageUrls = Array.isArray(body.imageUrls) ? body.imageUrls.filter((url) => typeof url === "string") : [];
 
     if (!process.env.BLOB_READ_WRITE_TOKEN) {
       return NextResponse.json(
@@ -29,33 +34,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Add a title and short message." }, { status: 400 });
     }
 
-    if (images.length !== 5) {
+    if (!/^[a-f0-9]{18}$/i.test(id)) {
+      return NextResponse.json({ error: "Invalid Momentoria id." }, { status: 400 });
+    }
+
+    if (imageUrls.length !== 5) {
       return NextResponse.json({ error: "Upload exactly 5 images." }, { status: 400 });
     }
 
-    const invalidImage = images.find((image) => !image.type.startsWith("image/"));
-    if (invalidImage) {
-      return NextResponse.json({ error: `${invalidImage.name} is not an image.` }, { status: 400 });
+    const invalidUrl = imageUrls.find((url) => !url.includes(".public.blob.vercel-storage.com/momentoria/"));
+    if (invalidUrl) {
+      return NextResponse.json({ error: "One uploaded image URL is not from Vercel Blob." }, { status: 400 });
     }
-
-    const id = makeMomentoriaId();
-
-    /*
-      Each image is uploaded directly to Vercel Blob under the new private id.
-      Blob returns public file URLs; only people with the generated /m/[id] link
-      can discover this Momentoria in the current MVP.
-    */
-    const imageUrls = await Promise.all(
-      images.map(async (image, index) => {
-        const extension = cleanFileName(image.name).split(".").pop() || "jpg";
-        const blob = await put(`momentoria/${id}/layer-${index + 1}.${extension}`, image, {
-          access: "public",
-          addRandomSuffix: false,
-          contentType: image.type,
-        });
-        return blob.url;
-      }),
-    );
 
     const metadata: MomentoriaMetadata = {
       id,

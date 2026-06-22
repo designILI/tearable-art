@@ -1,15 +1,20 @@
 "use client";
 
 import Image from "next/image";
+import { upload } from "@vercel/blob/client";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 const layerLabels = ["Top layer", "Layer 2", "Layer 3", "Layer 4", "Final layer"];
+
+type BlobStatus = "checking" | "connected" | "missing";
 
 export function CreateMomentoriaForm() {
   const [files, setFiles] = useState<File[]>([]);
   const [error, setError] = useState("");
   const [shareUrl, setShareUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [blobStatus, setBlobStatus] = useState<BlobStatus>("checking");
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   const fileNames = useMemo(() => files.map((file) => file.name).join(", "), [files]);
   const orderedFiles = useMemo(
@@ -28,6 +33,26 @@ export function CreateMomentoriaForm() {
     };
   }, [orderedFiles]);
 
+  useEffect(() => {
+    let ignore = false;
+
+    async function checkBlobStatus() {
+      try {
+        const response = await fetch("/api/blob/status");
+        const result = (await response.json()) as { configured?: boolean };
+        if (!ignore) setBlobStatus(result.configured ? "connected" : "missing");
+      } catch {
+        if (!ignore) setBlobStatus("missing");
+      }
+    }
+
+    void checkBlobStatus();
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
   function moveFile(fromIndex: number, direction: -1 | 1) {
     const toIndex = fromIndex + direction;
     if (toIndex < 0 || toIndex >= files.length) return;
@@ -45,30 +70,74 @@ export function CreateMomentoriaForm() {
     event.preventDefault();
     setError("");
     setShareUrl("");
+    setUploadProgress(0);
 
     if (files.length !== 5) {
       setError("Choose exactly 5 images.");
       return;
     }
 
-    setSubmitting(true);
-    const formData = new FormData(event.currentTarget);
-    formData.delete("images");
-    files.forEach((file) => formData.append("images", file));
-
-    const response = await fetch("/api/momentoria", {
-      method: "POST",
-      body: formData,
-    });
-    const result = (await response.json()) as { url?: string; error?: string };
-    setSubmitting(false);
-
-    if (!response.ok || !result.url) {
-      setError(result.error || "Could not create this Momentoria.");
+    if (blobStatus !== "connected") {
+      setError("Blob storage is not connected yet. Add BLOB_READ_WRITE_TOKEN in Vercel, redeploy, and try again.");
       return;
     }
 
-    setShareUrl(`${window.location.origin}${result.url}`);
+    setSubmitting(true);
+    const formData = new FormData(event.currentTarget);
+    const id = makeMomentoriaId();
+
+    try {
+      /*
+        Images go straight from the browser to Vercel Blob. The API route only
+        grants a short-lived upload token, so large files no longer pass through
+        a Vercel Function body and avoid FUNCTION_PAYLOAD_TOO_LARGE errors.
+      */
+      const uploadedImageUrls = await Promise.all(
+        files.map(async (file, index) => {
+          const extension = cleanFileName(file.name).split(".").pop() || "jpg";
+          const blob = await upload(`momentoria/${id}/layer-${index + 1}.${extension}`, file, {
+            access: "public",
+            handleUploadUrl: "/api/blob/upload",
+            contentType: file.type,
+            multipart: true,
+            onUploadProgress: ({ percentage }) => {
+              setUploadProgress((current) => Math.max(current, Math.round(((index + percentage / 100) / files.length) * 100)));
+            },
+          });
+
+          return blob.url;
+        }),
+      );
+
+      setUploadProgress(100);
+
+      const response = await fetch("/api/momentoria", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          id,
+          title: formData.get("title"),
+          message: formData.get("message"),
+          recipientName: formData.get("recipientName"),
+          imageUrls: uploadedImageUrls,
+        }),
+      });
+      const result = (await response.json()) as { url?: string; error?: string };
+
+      if (!response.ok || !result.url) {
+        setError(result.error || "Could not create this Momentoria.");
+        return;
+      }
+
+      setShareUrl(`${window.location.origin}${result.url}`);
+    } catch (uploadError) {
+      const message = uploadError instanceof Error ? uploadError.message : "Could not upload these images.";
+      setError(message);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -84,6 +153,20 @@ export function CreateMomentoriaForm() {
             placeholder="Summer in Lisbon"
           />
         </label>
+
+        <div
+          className={`rounded-[6px] border px-4 py-3 text-sm font-semibold ${
+            blobStatus === "connected"
+              ? "border-sage/30 bg-sage/12 text-ink"
+              : blobStatus === "missing"
+                ? "border-rose/25 bg-rose/12 text-ink"
+                : "border-ink/10 bg-white/60 text-ink/60"
+          }`}
+        >
+          {blobStatus === "checking" ? "Checking Blob storage..." : null}
+          {blobStatus === "connected" ? "Blob storage connected" : null}
+          {blobStatus === "missing" ? "Blob storage is not connected" : null}
+        </div>
 
         <label className="grid gap-2">
           <span className="text-sm font-semibold text-ink">Short message</span>
@@ -170,6 +253,18 @@ export function CreateMomentoriaForm() {
 
       {error ? <p className="mt-5 rounded-[6px] bg-rose/15 px-4 py-3 text-sm font-semibold text-ink">{error}</p> : null}
 
+      {submitting ? (
+        <div className="mt-5 rounded-[6px] border border-ink/10 bg-white/60 p-4">
+          <div className="flex items-center justify-between gap-3 text-sm font-semibold text-ink">
+            <span>{uploadProgress < 100 ? "Uploading images..." : "Saving Momentoria..."}</span>
+            <span>{uploadProgress}%</span>
+          </div>
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-ink/10">
+            <div className="h-full rounded-full bg-sage transition-all" style={{ width: `${uploadProgress}%` }} />
+          </div>
+        </div>
+      ) : null}
+
       {shareUrl ? (
         <div className="mt-5 rounded-[6px] border border-sage/30 bg-sage/12 p-4">
           <p className="text-sm font-semibold text-ink">Private share link</p>
@@ -188,4 +283,12 @@ export function CreateMomentoriaForm() {
       </button>
     </form>
   );
+}
+
+function makeMomentoriaId() {
+  return crypto.randomUUID().replaceAll("-", "").slice(0, 18);
+}
+
+function cleanFileName(name: string) {
+  return name.toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "image";
 }

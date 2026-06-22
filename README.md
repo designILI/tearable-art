@@ -16,13 +16,14 @@ Users upload exactly 5 images, add a title and short message, and receive a priv
 
 ## How Uploads Work
 
-The create form posts to `app/api/momentoria/route.ts`.
+The create form uses Vercel Blob client uploads.
 
 1. The route validates the title, message, optional recipient name, and exactly 5 image files.
-2. It creates a high-entropy Momentoria id.
-3. It uploads each image to Vercel Blob under `momentoria/{id}/`.
-4. It saves `metadata.json` to Vercel Blob with the title, message, recipient name, image URLs, and creation time.
-5. It returns `/m/{id}` as the private share URL.
+2. The browser asks `app/api/blob/upload/route.ts` for a short-lived Blob upload token.
+3. Each image uploads directly from the browser to Vercel Blob under `momentoria/{id}/`.
+4. The browser posts the returned Blob URLs to `app/api/momentoria/route.ts`.
+5. The API saves `metadata.json` to Vercel Blob with the title, message, recipient name, image URLs, and creation time.
+6. It returns `/m/{id}` as the private share URL.
 
 This keeps the MVP deployable without a separate database. For a larger product, replace the metadata helpers in `lib/momentoria.ts` with Vercel Postgres, Neon, Supabase, or another database.
 
@@ -50,6 +51,8 @@ Visit:
 - `http://localhost:3000/m/demo` for a local tearable share preview using the bundled sample images
 
 Creating a real Momentoria locally requires `BLOB_READ_WRITE_TOKEN`.
+
+The create page shows a Blob storage status message. If it says `Blob storage connected`, the app can see `BLOB_READ_WRITE_TOKEN`. A successful submit is the final proof: it creates five files and `metadata.json` in Vercel Blob, then displays the private link.
 
 ## Checks
 
