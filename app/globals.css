@@ -40,3 +40,17 @@ textarea {
 .stage-canvas.is-tearing {
   cursor: grabbing;
 }
+
+.momentoria-end-card {
+  animation: momentoria-end-card 1200ms ease-out both;
+}
+
+@keyframes momentoria-end-card {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}

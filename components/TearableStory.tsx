@@ -8,6 +8,7 @@ type TearableStoryProps = {
   title: string;
   disabled?: boolean;
   onCompleteReveal?: () => void;
+  onReset?: () => void;
 };
 
 type LayerSource = {
@@ -55,12 +56,13 @@ const palettes: [string, string, string][] = [
   ["#c9ac8f", "#8a5743", "#160f0c"],
 ];
 
-export function TearableStory({ imageUrls, title, disabled = false, onCompleteReveal }: TearableStoryProps) {
+export function TearableStory({ imageUrls, title, disabled = false, onCompleteReveal, onReset }: TearableStoryProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const introOverlayRef = useRef<HTMLCanvasElement | null>(null);
   const statusRef = useRef<HTMLParagraphElement | null>(null);
   const resetRef = useRef<HTMLButtonElement | null>(null);
   const completedRef = useRef(false);
+  const introDismissedRef = useRef(false);
   const [introVisible, setIntroVisible] = useState(true);
 
   useEffect(() => {
@@ -740,7 +742,10 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
         layer.hidden = true;
         layer.mesh.visible = false;
         state.peelTransition = null;
-        if (layer.kind === "intro") setIntroVisible(false);
+        if (layer.kind === "intro") {
+          introDismissedRef.current = true;
+          setIntroVisible(false);
+        }
         restoreMesh(layer);
       }
     }
@@ -812,13 +817,15 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
 
     function resetArtwork() {
       completedRef.current = false;
-      setIntroVisible(true);
-      resetIntroOverlayMask();
+      const resetLayer = introDismissedRef.current ? 1 : 0;
+      setIntroVisible(!introDismissedRef.current);
       state.peelTransition = null;
-      state.activeLayer = 0;
+      state.activeLayer = resetLayer;
       state.layers.forEach(resetMask);
+      if (!introDismissedRef.current) resetIntroOverlayMask();
       resetGesture();
       updateStatus();
+      onReset?.();
     }
 
     function updateStatus() {
@@ -1052,7 +1059,7 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
       flap.material.dispose();
       renderer.dispose();
     };
-  }, [disabled, imageUrls, onCompleteReveal]);
+  }, [disabled, imageUrls, onCompleteReveal, onReset]);
 
   return (
     <div className="relative h-full w-full overflow-hidden">

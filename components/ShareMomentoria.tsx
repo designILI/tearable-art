@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { MomentoriaMetadata } from "@/lib/momentoria";
 import { TearableStory } from "@/components/TearableStory";
 
@@ -10,28 +10,52 @@ type ShareMomentoriaProps = {
 
 export function ShareMomentoria({ momentoria }: ShareMomentoriaProps) {
   const storageKey = `momentoria:${momentoria.id}:complete-reveals`;
+  const endCardTimerRef = useRef<number | null>(null);
   const [completeReveals, setCompleteReveals] = useState(0);
-  const faded = completeReveals >= 3;
+  const [showEndCard, setShowEndCard] = useState(false);
+  const [momentoriaLink, setMomentoriaLink] = useState("https://tearable-art.vercel.app");
 
   useEffect(() => {
-    setCompleteReveals(Number(window.localStorage.getItem(storageKey) || "0"));
+    const storedReveals = Number(window.localStorage.getItem(storageKey) || "0");
+    setCompleteReveals(storedReveals);
+    setShowEndCard(storedReveals >= 3);
+    setMomentoriaLink(window.location.origin);
   }, [storageKey]);
 
   const handleCompleteReveal = useCallback(() => {
     setCompleteReveals((current) => {
       const next = Math.min(current + 1, 3);
       window.localStorage.setItem(storageKey, String(next));
+      if (next >= 3) {
+        if (endCardTimerRef.current) window.clearTimeout(endCardTimerRef.current);
+        endCardTimerRef.current = window.setTimeout(() => setShowEndCard(true), 4000);
+      }
       return next;
     });
   }, [storageKey]);
+
+  const handleReset = useCallback(() => {
+    setShowEndCard(false);
+    if (endCardTimerRef.current) {
+      window.clearTimeout(endCardTimerRef.current);
+      endCardTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (endCardTimerRef.current) window.clearTimeout(endCardTimerRef.current);
+    };
+  }, []);
 
   return (
     <main className="relative h-svh overflow-hidden bg-dusk text-cream">
       <TearableStory
         imageUrls={momentoria.imageUrls}
         title={momentoria.title}
-        disabled={faded}
+        disabled={showEndCard}
         onCompleteReveal={handleCompleteReveal}
+        onReset={handleReset}
       />
 
       <section className="pointer-events-none absolute left-0 top-0 z-10 w-full p-5 sm:p-8">
@@ -48,11 +72,21 @@ export function ShareMomentoria({ momentoria }: ShareMomentoriaProps) {
         {Math.min(completeReveals, 3)} / 3 reveals
       </div>
 
-      {faded ? (
-        <div className="absolute inset-0 z-20 grid place-items-center bg-dusk/86 px-5 text-center backdrop-blur-md">
-          <div>
-            <p className="font-serif text-4xl font-semibold text-cream sm:text-6xl">This Momentoria has faded.</p>
-            <p className="mt-4 text-sm text-cream/64">This browser has completed the story three times.</p>
+      {showEndCard ? (
+        <div className="momentoria-end-card absolute inset-0 z-20 grid place-items-center bg-dusk/88 px-5 text-center backdrop-blur-md">
+          <div className="max-w-2xl">
+            <p className="font-serif text-4xl font-semibold leading-tight text-cream sm:text-6xl">
+              Hope you enjoyed the Moment!
+            </p>
+            <p className="mt-6 text-xl font-semibold text-cream/82 sm:text-2xl">Let the sender know!</p>
+            <p className="mt-8 text-sm uppercase tracking-[0.18em] text-cream/54">Make your own</p>
+            <a
+              href={momentoriaLink}
+              className="mt-3 inline-flex min-h-12 items-center justify-center rounded-full border border-cream/32 px-6 text-sm font-semibold text-cream transition hover:border-cream/70 hover:bg-cream/10"
+            >
+              Visit Momentoria
+            </a>
+            <p className="mt-6 text-xs uppercase tracking-[0.16em] text-cream/42">This Momentoria has faded.</p>
           </div>
         </div>
       ) : null}
