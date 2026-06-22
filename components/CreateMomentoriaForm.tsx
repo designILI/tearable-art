@@ -15,6 +15,7 @@ export function CreateMomentoriaForm() {
   const [submitting, setSubmitting] = useState(false);
   const [blobStatus, setBlobStatus] = useState<BlobStatus>("checking");
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStatus, setUploadStatus] = useState("");
 
   const fileNames = useMemo(() => files.map((file) => file.name).join(", "), [files]);
   const orderedFiles = useMemo(
@@ -71,6 +72,7 @@ export function CreateMomentoriaForm() {
     setError("");
     setShareUrl("");
     setUploadProgress(0);
+    setUploadStatus("");
 
     if (files.length !== 5) {
       setError("Choose exactly 5 images.");
@@ -92,24 +94,35 @@ export function CreateMomentoriaForm() {
         grants a short-lived upload token, so large files no longer pass through
         a Vercel Function body and avoid FUNCTION_PAYLOAD_TOO_LARGE errors.
       */
-      const uploadedImageUrls = await Promise.all(
-        files.map(async (file, index) => {
-          const extension = cleanFileName(file.name).split(".").pop() || "jpg";
-          const blob = await upload(`momentoria/${id}/layer-${index + 1}.${extension}`, file, {
-            access: "public",
-            handleUploadUrl: "/api/blob/upload",
-            contentType: file.type,
-            multipart: true,
-            onUploadProgress: ({ percentage }) => {
-              setUploadProgress((current) => Math.max(current, Math.round(((index + percentage / 100) / files.length) * 100)));
-            },
-          });
+      const uploadedImageUrls: string[] = [];
 
-          return blob.url;
-        }),
-      );
+      for (let index = 0; index < files.length; index += 1) {
+        const file = files[index];
+        setUploadStatus(`Preparing image ${index + 1} of ${files.length}...`);
+        setUploadProgress(Math.max(uploadProgress, Math.round((index / files.length) * 100)));
+
+        const uploadFile = await prepareImageForUpload(file);
+        const extension = cleanFileName(uploadFile.name).split(".").pop() || "jpg";
+
+        setUploadStatus(`Uploading image ${index + 1} of ${files.length}...`);
+        setUploadProgress(Math.round((index / files.length) * 100));
+
+        const blob = await upload(`momentoria/${id}/layer-${index + 1}.${extension}`, uploadFile, {
+          access: "public",
+          handleUploadUrl: "/api/blob/upload",
+          contentType: uploadFile.type,
+          multipart: uploadFile.size > 8 * 1024 * 1024,
+          onUploadProgress: ({ percentage }) => {
+            setUploadProgress(Math.max(1, Math.round(((index + percentage / 100) / files.length) * 100)));
+          },
+        });
+
+        uploadedImageUrls.push(blob.url);
+        setUploadProgress(Math.round(((index + 1) / files.length) * 100));
+      }
 
       setUploadProgress(100);
+      setUploadStatus("Saving Momentoria...");
 
       const response = await fetch("/api/momentoria", {
         method: "POST",
@@ -137,6 +150,7 @@ export function CreateMomentoriaForm() {
       setError(message);
     } finally {
       setSubmitting(false);
+      setUploadStatus("");
     }
   }
 
@@ -256,7 +270,7 @@ export function CreateMomentoriaForm() {
       {submitting ? (
         <div className="mt-5 rounded-[6px] border border-ink/10 bg-white/60 p-4">
           <div className="flex items-center justify-between gap-3 text-sm font-semibold text-ink">
-            <span>{uploadProgress < 100 ? "Uploading images..." : "Saving Momentoria..."}</span>
+            <span>{uploadStatus || (uploadProgress < 100 ? "Uploading images..." : "Saving Momentoria...")}</span>
             <span>{uploadProgress}%</span>
           </div>
           <div className="mt-3 h-2 overflow-hidden rounded-full bg-ink/10">
@@ -291,4 +305,55 @@ function makeMomentoriaId() {
 
 function cleanFileName(name: string) {
   return name.toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "image";
+}
+
+async function prepareImageForUpload(file: File) {
+  const maxDimension = 1800;
+  const jpegQuality = 0.82;
+
+  if (file.size <= 1.8 * 1024 * 1024 || !file.type.startsWith("image/") || file.type === "image/gif") {
+    return file;
+  }
+
+  try {
+    const image = await loadImage(file);
+    const scale = Math.min(1, maxDimension / Math.max(image.naturalWidth, image.naturalHeight));
+    const width = Math.max(1, Math.round(image.naturalWidth * scale));
+    const height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+
+    if (!context) return file;
+
+    context.drawImage(image, 0, 0, width, height);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", jpegQuality));
+
+    if (!blob || blob.size >= file.size) return file;
+
+    return new File([blob], `${cleanFileName(file.name).replace(/\.[a-z0-9]+$/i, "") || "image"}.jpg`, {
+      type: "image/jpeg",
+      lastModified: Date.now(),
+    });
+  } catch {
+    return file;
+  }
+}
+
+function loadImage(file: File) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = document.createElement("img");
+    const url = URL.createObjectURL(file);
+
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Could not prepare this image."));
+    };
+    image.src = url;
+  });
 }
