@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 
 type TearableStoryProps = {
@@ -14,6 +14,7 @@ type LayerSource = {
   image: string;
   palette: [string, string, string];
   name: string;
+  kind: "intro" | "image";
 };
 
 type StoryLayer = LayerSource & {
@@ -24,7 +25,7 @@ type StoryLayer = LayerSource & {
   mask: HTMLCanvasElement;
   maskCtx: CanvasRenderingContext2D;
   maskTexture: THREE.CanvasTexture;
-  material: THREE.MeshStandardMaterial;
+  material: THREE.MeshBasicMaterial;
   geometry: THREE.PlaneGeometry;
   mesh: THREE.Mesh;
   imageElement: HTMLImageElement | null;
@@ -40,6 +41,12 @@ type SeamPoint = {
   radius: number;
 };
 
+type StoryAudio = {
+  context: AudioContext;
+  master: GainNode;
+  lastTearAt: number;
+};
+
 const palettes: [string, string, string][] = [
   ["#d9c4a0", "#7c725f", "#1a1714"],
   ["#9fc9ca", "#4f7f84", "#111f24"],
@@ -53,6 +60,7 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
   const statusRef = useRef<HTMLParagraphElement | null>(null);
   const resetRef = useRef<HTMLButtonElement | null>(null);
   const completedRef = useRef(false);
+  const [introVisible, setIntroVisible] = useState(true);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -62,11 +70,20 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
     const stageCanvas = canvas;
     const statusElement = layerStatus;
 
-    const layerSources: LayerSource[] = imageUrls.slice(0, 5).map((image, index) => ({
-      image,
-      palette: palettes[index] ?? palettes[0],
-      name: `Layer ${index + 1}`,
-    }));
+    const layerSources: LayerSource[] = [
+      {
+        image: "",
+        palette: ["#efe7d7", "#8d7d67", "#211b16"],
+        name: "Invitation",
+        kind: "intro",
+      },
+      ...imageUrls.slice(0, 5).map((image, index) => ({
+        image,
+        palette: palettes[index] ?? palettes[0],
+        name: `Layer ${index + 1}`,
+        kind: "image" as const,
+      })),
+    ];
 
     const renderer = new THREE.WebGLRenderer({
       canvas: stageCanvas,
@@ -114,6 +131,7 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
       tearPercent: 0,
       peelTransition: null as { layer: StoryLayer; startedAt: number; duration: number } | null,
     };
+    let storyAudio: StoryAudio | null = null;
 
     const flap = {
       geometry: new THREE.BufferGeometry(),
@@ -151,14 +169,12 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
         texture.wrapT = THREE.ClampToEdgeWrapping;
       }
 
-      const material = new THREE.MeshStandardMaterial({
+      const material = new THREE.MeshBasicMaterial({
         map: artTexture,
         alphaMap: maskTexture,
         transparent: true,
         alphaTest: 0.03,
         side: THREE.DoubleSide,
-        roughness: 0.86,
-        metalness: 0,
       });
 
       const geometry = new THREE.PlaneGeometry(2, 2, 96, 64);
@@ -192,6 +208,12 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
     function setupLayers() {
       state.layers = layerSources.map(makeLayer);
       state.layers.forEach((layer) => {
+        if (layer.kind === "intro") {
+          paintLayer(layer);
+          render();
+          return;
+        }
+
         const image = new Image();
         image.crossOrigin = "anonymous";
         image.onload = () => {
@@ -249,7 +271,9 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
       const ctx = layer.artCtx;
       ctx.clearRect(0, 0, state.width, state.height);
 
-      if (layer.imageElement) {
+      if (layer.kind === "intro") {
+        paintIntroLayer(ctx, layer);
+      } else if (layer.imageElement) {
         drawImageContain(ctx, layer.imageElement, state.width, state.height, layer.palette);
       } else {
         paintPlaceholder(ctx, layer);
@@ -258,6 +282,60 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
       addPaperFibers(ctx, layer.index);
       addVignette(ctx);
       layer.artTexture.needsUpdate = true;
+    }
+
+    function paintIntroLayer(ctx: CanvasRenderingContext2D, layer: StoryLayer) {
+      const [light, mid, dark] = layer.palette;
+      const gradient = ctx.createLinearGradient(0, 0, state.width, state.height);
+      gradient.addColorStop(0, light);
+      gradient.addColorStop(0.56, "#d8cbb7");
+      gradient.addColorStop(1, "#a99a83");
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, state.width, state.height);
+
+      const centerX = state.width / 2;
+      const maxWidth = Math.min(state.width * 0.76, 760);
+      const titleSize = clamp(state.width * 0.055, 34, 76);
+      const bodySize = clamp(state.width * 0.024, 17, 25);
+      const smallSize = clamp(state.width * 0.018, 13, 17);
+
+      ctx.save();
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = dark;
+      ctx.font = `600 ${titleSize}px Georgia, serif`;
+      wrapText(ctx, "Someone has shared a Moment with you", centerX, state.height * 0.31, maxWidth, titleSize * 1.08);
+
+      ctx.font = `500 ${bodySize}px Arial, sans-serif`;
+      ctx.fillStyle = "rgba(33, 27, 22, 0.78)";
+      wrapText(
+        ctx,
+        "To experience it, place your finger on the screen and move it along the surface.",
+        centerX,
+        state.height * 0.5,
+        maxWidth,
+        bodySize * 1.45,
+      );
+
+      ctx.font = `600 ${smallSize}px Arial, sans-serif`;
+      ctx.fillStyle = mid;
+      wrapText(
+        ctx,
+        "You have 3 cycles of this Moment before it fades. Visit Momentoria to make and share your own Moment.",
+        centerX,
+        state.height * 0.68,
+        Math.min(maxWidth, 620),
+        smallSize * 1.5,
+      );
+
+      ctx.globalAlpha = 0.22;
+      ctx.strokeStyle = dark;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(centerX - maxWidth * 0.25, state.height * 0.41);
+      ctx.lineTo(centerX + maxWidth * 0.25, state.height * 0.41);
+      ctx.stroke();
+      ctx.restore();
     }
 
     function paintPlaceholder(ctx: CanvasRenderingContext2D, layer: StoryLayer) {
@@ -343,6 +421,7 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
     function beginPointer(event: PointerEvent) {
       if (disabled || state.peelTransition || state.activeLayer >= state.layers.length - 1) return;
 
+      ensureAudio();
       const point = pointerFromEvent(event);
       state.pointers.set(event.pointerId, point);
       state.pointer.copy(averagePointers());
@@ -429,6 +508,7 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
 
       const distance = state.head.distanceTo(state.lastHead);
       const steps = Math.max(1, Math.ceil(distance / 6));
+      playTearSound(state.velocity.length());
       for (let i = 1; i <= steps; i += 1) {
         const point = state.lastHead.clone().lerp(state.head, i / steps);
         const radius = state.brush * (0.82 + Math.sin(point.x * 0.012 + point.y * 0.008) * 0.08);
@@ -609,6 +689,8 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
       layer.peelStart = performance.now();
       state.peelTransition = { layer, startedAt: layer.peelStart, duration: 1100 };
       state.activeLayer += 1;
+      if (layer.kind === "intro") setIntroVisible(false);
+      playDropSound();
       updateStatus();
 
       if (state.activeLayer === state.layers.length - 1 && !completedRef.current) {
@@ -718,6 +800,7 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
 
     function resetArtwork() {
       completedRef.current = false;
+      setIntroVisible(true);
       state.peelTransition = null;
       state.activeLayer = 0;
       state.layers.forEach(resetMask);
@@ -726,7 +809,132 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
     }
 
     function updateStatus() {
-      statusElement.textContent = `Layer ${Math.min(state.activeLayer + 1, state.layers.length)} of ${state.layers.length}`;
+      statusElement.textContent =
+        state.activeLayer === 0
+          ? "Invitation"
+          : `Layer ${Math.min(state.activeLayer, imageUrls.length)} of ${imageUrls.length}`;
+    }
+
+    function ensureAudio() {
+      if (storyAudio) return storyAudio;
+
+      const AudioContextConstructor =
+        window.AudioContext ||
+        (window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioContextConstructor) return null;
+
+      const context = new AudioContextConstructor();
+      const master = context.createGain();
+      master.gain.value = 0.18;
+      master.connect(context.destination);
+      storyAudio = { context, master, lastTearAt: 0 };
+
+      if (context.state === "suspended") {
+        void context.resume();
+      }
+
+      return storyAudio;
+    }
+
+    function playTearSound(speed: number) {
+      const audio = ensureAudio();
+      if (!audio) return;
+
+      const now = audio.context.currentTime;
+      if (now - audio.lastTearAt < 0.065) return;
+      audio.lastTearAt = now;
+
+      const duration = 0.075;
+      const buffer = audio.context.createBuffer(1, Math.floor(audio.context.sampleRate * duration), audio.context.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i += 1) {
+        const envelope = 1 - i / data.length;
+        data[i] = (Math.random() * 2 - 1) * envelope;
+      }
+
+      const source = audio.context.createBufferSource();
+      const filter = audio.context.createBiquadFilter();
+      const gain = audio.context.createGain();
+      source.buffer = buffer;
+      filter.type = "bandpass";
+      filter.frequency.value = 820 + clamp(speed, 0, 48) * 18;
+      filter.Q.value = 0.82;
+      gain.gain.setValueAtTime(0.014 + Math.min(speed / 2200, 0.035), now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+      source.connect(filter);
+      filter.connect(gain);
+      gain.connect(audio.master);
+      source.start(now);
+      source.stop(now + duration);
+    }
+
+    function playDropSound() {
+      const audio = ensureAudio();
+      if (!audio) return;
+
+      const now = audio.context.currentTime;
+      const oscillator = audio.context.createOscillator();
+      const toneGain = audio.context.createGain();
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(122, now);
+      oscillator.frequency.exponentialRampToValueAtTime(68, now + 0.22);
+      toneGain.gain.setValueAtTime(0.05, now);
+      toneGain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+      oscillator.connect(toneGain);
+      toneGain.connect(audio.master);
+      oscillator.start(now);
+      oscillator.stop(now + 0.34);
+
+      const duration = 0.22;
+      const buffer = audio.context.createBuffer(1, Math.floor(audio.context.sampleRate * duration), audio.context.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i += 1) {
+        const envelope = Math.exp((-6 * i) / data.length);
+        data[i] = (Math.random() * 2 - 1) * envelope;
+      }
+
+      const source = audio.context.createBufferSource();
+      const filter = audio.context.createBiquadFilter();
+      const gain = audio.context.createGain();
+      source.buffer = buffer;
+      filter.type = "lowpass";
+      filter.frequency.value = 430;
+      gain.gain.setValueAtTime(0.055, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+      source.connect(filter);
+      filter.connect(gain);
+      gain.connect(audio.master);
+      source.start(now);
+      source.stop(now + duration);
+    }
+
+    function wrapText(
+      ctx: CanvasRenderingContext2D,
+      text: string,
+      x: number,
+      y: number,
+      maxWidth: number,
+      lineHeight: number,
+    ) {
+      const words = text.split(" ");
+      const lines: string[] = [];
+      let line = "";
+
+      words.forEach((word) => {
+        const testLine = line ? `${line} ${word}` : word;
+        if (ctx.measureText(testLine).width > maxWidth && line) {
+          lines.push(line);
+          line = word;
+        } else {
+          line = testLine;
+        }
+      });
+      if (line) lines.push(line);
+
+      const startY = y - ((lines.length - 1) * lineHeight) / 2;
+      lines.forEach((lineText, index) => {
+        ctx.fillText(lineText, x, startY + index * lineHeight);
+      });
     }
 
     function noise01(value: number) {
@@ -761,6 +969,9 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
       stageCanvas.removeEventListener("pointerup", endPointer);
       stageCanvas.removeEventListener("pointercancel", endPointer);
       resetButton.removeEventListener("click", resetArtwork);
+      if (storyAudio) {
+        void storyAudio.context.close();
+      }
       state.layers.forEach((layer) => {
         layer.geometry.dispose();
         layer.material.dispose();
@@ -776,10 +987,26 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
   return (
     <div className="relative h-full w-full overflow-hidden">
       <canvas ref={canvasRef} className="stage-canvas block h-full w-full" aria-label={title} />
+      {introVisible && !disabled ? (
+        <div className="pointer-events-none absolute inset-0 z-20 grid place-items-center bg-[#e6dac6] px-6 text-center text-[#211b16] shadow-[inset_0_0_120px_rgba(33,27,22,0.24)]">
+          <div className="max-w-3xl">
+            <p className="font-serif text-4xl font-semibold leading-none sm:text-6xl">
+              Someone has shared a Moment with you
+            </p>
+            <p className="mx-auto mt-8 max-w-2xl text-lg font-medium leading-8 text-[#211b16]/78 sm:text-2xl sm:leading-10">
+              To experience it, place your finger on the screen and move it along the surface.
+            </p>
+            <div className="mx-auto my-8 h-px w-36 bg-[#211b16]/24" />
+            <p className="mx-auto max-w-xl text-sm font-semibold uppercase leading-7 tracking-[0.16em] text-[#756853] sm:text-base">
+              You have 3 cycles of this Moment before it fades. Visit Momentoria to make and share your own Moment.
+            </p>
+          </div>
+        </div>
+      ) : null}
       <div className="absolute bottom-5 right-5 z-10 flex items-end gap-3 text-right text-cream sm:bottom-8 sm:right-8">
         <div>
           <p ref={statusRef} className="text-xs font-semibold uppercase tracking-[0.16em] text-cream/74">
-            Layer 1 of 5
+            Invitation
           </p>
         </div>
         <button
