@@ -8,6 +8,8 @@ const layerLabels = ["Top layer", "Layer 2", "Layer 3", "Layer 4", "Final layer"
 
 type BlobStatus = "checking" | "connected" | "missing";
 
+const UPLOAD_TIMEOUT_MS = 90_000;
+
 export function CreateMomentoriaForm() {
   const [files, setFiles] = useState<File[]>([]);
   const [error, setError] = useState("");
@@ -107,18 +109,40 @@ export function CreateMomentoriaForm() {
         setUploadStatus(`Uploading image ${index + 1} of ${files.length}...`);
         setUploadProgress(Math.round((index / files.length) * 100));
 
-        const blob = await upload(`momentoria/${id}/layer-${index + 1}.${extension}`, uploadFile, {
-          access: "public",
-          handleUploadUrl: "/api/blob/upload",
-          contentType: uploadFile.type,
-          multipart: uploadFile.size > 8 * 1024 * 1024,
-          onUploadProgress: ({ percentage }) => {
-            setUploadProgress(Math.max(1, Math.round(((index + percentage / 100) / files.length) * 100)));
-          },
-        });
+        const abortController = new AbortController();
+        const timeout = window.setTimeout(() => abortController.abort(), UPLOAD_TIMEOUT_MS);
 
-        uploadedImageUrls.push(blob.url);
-        setUploadProgress(Math.round(((index + 1) / files.length) * 100));
+        let imageUploadComplete = false;
+
+        try {
+          const blob = await upload(`momentoria/${id}/layer-${index + 1}.${extension}`, uploadFile, {
+            access: "public",
+            handleUploadUrl: "/api/blob/upload",
+            contentType: uploadFile.type,
+            multipart: uploadFile.size > 8 * 1024 * 1024,
+            abortSignal: abortController.signal,
+            onUploadProgress: ({ percentage }) => {
+              const nextProgress = Math.max(1, Math.round(((index + percentage / 100) / files.length) * 100));
+              setUploadProgress(nextProgress);
+
+              if (percentage >= 100 && !imageUploadComplete) {
+                imageUploadComplete = true;
+                setUploadStatus(`Finalizing image ${index + 1} of ${files.length}...`);
+              }
+            },
+          });
+
+          uploadedImageUrls.push(blob.url);
+          setUploadProgress(Math.round(((index + 1) / files.length) * 100));
+        } catch (uploadError) {
+          if (abortController.signal.aborted) {
+            throw new Error(`Image ${index + 1} took too long to upload. Try smaller JPG or WebP images, then submit again.`);
+          }
+
+          throw uploadError;
+        } finally {
+          window.clearTimeout(timeout);
+        }
       }
 
       setUploadProgress(100);
