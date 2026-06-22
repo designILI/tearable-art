@@ -57,6 +57,7 @@ const palettes: [string, string, string][] = [
 
 export function TearableStory({ imageUrls, title, disabled = false, onCompleteReveal }: TearableStoryProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const introOverlayRef = useRef<HTMLCanvasElement | null>(null);
   const statusRef = useRef<HTMLParagraphElement | null>(null);
   const resetRef = useRef<HTMLButtonElement | null>(null);
   const completedRef = useRef(false);
@@ -64,11 +65,13 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
 
   useEffect(() => {
     const canvas = canvasRef.current;
+    const introOverlayCanvas = introOverlayRef.current;
     const resetButton = resetRef.current;
     const layerStatus = statusRef.current;
     if (!canvas || !resetButton || !layerStatus) return;
     const stageCanvas = canvas;
     const statusElement = layerStatus;
+    const introOverlayCtx = introOverlayCanvas?.getContext("2d") ?? null;
 
     const layerSources: LayerSource[] = [
       {
@@ -263,6 +266,7 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
         resetMask(layer);
       });
 
+      resetIntroOverlayMask();
       resetGesture();
       render();
     }
@@ -272,7 +276,7 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
       ctx.clearRect(0, 0, state.width, state.height);
 
       if (layer.kind === "intro") {
-        paintIntroLayer(ctx, layer);
+        paintIntroLayer(ctx, layer.palette);
       } else if (layer.imageElement) {
         drawImageContain(ctx, layer.imageElement, state.width, state.height, layer.palette);
       } else {
@@ -284,8 +288,8 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
       layer.artTexture.needsUpdate = true;
     }
 
-    function paintIntroLayer(ctx: CanvasRenderingContext2D, layer: StoryLayer) {
-      const [light, mid, dark] = layer.palette;
+    function paintIntroLayer(ctx: CanvasRenderingContext2D, palette: [string, string, string]) {
+      const [light, mid, dark] = palette;
       const gradient = ctx.createLinearGradient(0, 0, state.width, state.height);
       gradient.addColorStop(0, light);
       gradient.addColorStop(0.56, "#d8cbb7");
@@ -556,6 +560,10 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
       ctx.arc(point.x, point.y, radius * 1.35, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
+
+      if (layer.kind === "intro") {
+        cutIntroOverlayHole(point, radius);
+      }
     }
 
     function addSeamPoint(point: THREE.Vector2, radius: number) {
@@ -689,7 +697,6 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
       layer.peelStart = performance.now();
       state.peelTransition = { layer, startedAt: layer.peelStart, duration: 1100 };
       state.activeLayer += 1;
-      if (layer.kind === "intro") setIntroVisible(false);
       playDropSound();
       updateStatus();
 
@@ -722,6 +729,10 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
       layer.maskCtx.restore();
       layer.maskTexture.needsUpdate = true;
 
+      if (layer.kind === "intro") {
+        cutIntroOverlayPeel(radius);
+      }
+
       peelMeshFromCenter(layer, eased);
 
       if (progress >= 1) {
@@ -729,6 +740,7 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
         layer.hidden = true;
         layer.mesh.visible = false;
         state.peelTransition = null;
+        if (layer.kind === "intro") setIntroVisible(false);
         restoreMesh(layer);
       }
     }
@@ -801,6 +813,7 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
     function resetArtwork() {
       completedRef.current = false;
       setIntroVisible(true);
+      resetIntroOverlayMask();
       state.peelTransition = null;
       state.activeLayer = 0;
       state.layers.forEach(resetMask);
@@ -813,6 +826,63 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
         state.activeLayer === 0
           ? "Invitation"
           : `Layer ${Math.min(state.activeLayer, imageUrls.length)} of ${imageUrls.length}`;
+    }
+
+    function resetIntroOverlayMask() {
+      if (!introOverlayCanvas || !introOverlayCtx) return;
+
+      introOverlayCanvas.width = Math.round(state.width * state.dpr);
+      introOverlayCanvas.height = Math.round(state.height * state.dpr);
+      introOverlayCtx.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
+      introOverlayCtx.globalCompositeOperation = "source-over";
+      introOverlayCtx.clearRect(0, 0, state.width, state.height);
+      paintIntroLayer(introOverlayCtx, ["#efe7d7", "#8d7d67", "#211b16"]);
+      addPaperFibers(introOverlayCtx, 0);
+      addVignette(introOverlayCtx);
+    }
+
+    function cutIntroOverlayHole(point: THREE.Vector2, radius: number) {
+      if (!introOverlayCtx) return;
+
+      introOverlayCtx.save();
+      introOverlayCtx.globalCompositeOperation = "destination-out";
+      introOverlayCtx.beginPath();
+      for (let i = 0; i <= 32; i += 1) {
+        const angle = (Math.PI * 2 * i) / 32;
+        const wobble = 0.94 + Math.sin(point.x * 0.01 + point.y * 0.013 + i * 0.73) * 0.06;
+        const x = point.x + Math.cos(angle) * radius * wobble;
+        const y = point.y + Math.sin(angle) * radius * wobble;
+        if (i === 0) introOverlayCtx.moveTo(x, y);
+        else introOverlayCtx.lineTo(x, y);
+      }
+      introOverlayCtx.closePath();
+      introOverlayCtx.fill();
+
+      const feather = introOverlayCtx.createRadialGradient(point.x, point.y, radius * 0.52, point.x, point.y, radius * 1.32);
+      feather.addColorStop(0, "rgba(0, 0, 0, 0.28)");
+      feather.addColorStop(1, "rgba(0, 0, 0, 0)");
+      introOverlayCtx.fillStyle = feather;
+      introOverlayCtx.beginPath();
+      introOverlayCtx.arc(point.x, point.y, radius * 1.32, 0, Math.PI * 2);
+      introOverlayCtx.fill();
+      introOverlayCtx.restore();
+    }
+
+    function cutIntroOverlayPeel(radius: number) {
+      if (!introOverlayCtx) return;
+
+      const cx = state.width / 2;
+      const cy = state.height / 2;
+      introOverlayCtx.save();
+      introOverlayCtx.globalCompositeOperation = "destination-out";
+      const gradient = introOverlayCtx.createRadialGradient(cx, cy, radius * 0.62, cx, cy, radius);
+      gradient.addColorStop(0, "rgba(0, 0, 0, 0.72)");
+      gradient.addColorStop(1, "rgba(0, 0, 0, 0)");
+      introOverlayCtx.fillStyle = gradient;
+      introOverlayCtx.beginPath();
+      introOverlayCtx.arc(cx, cy, radius, 0, Math.PI * 2);
+      introOverlayCtx.fill();
+      introOverlayCtx.restore();
     }
 
     function ensureAudio() {
@@ -987,22 +1057,13 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
   return (
     <div className="relative h-full w-full overflow-hidden">
       <canvas ref={canvasRef} className="stage-canvas block h-full w-full" aria-label={title} />
-      {introVisible && !disabled ? (
-        <div className="pointer-events-none absolute inset-0 z-20 grid place-items-center bg-[#e6dac6] px-6 text-center text-[#211b16] shadow-[inset_0_0_120px_rgba(33,27,22,0.24)]">
-          <div className="max-w-3xl">
-            <p className="font-serif text-4xl font-semibold leading-none sm:text-6xl">
-              Someone has shared a Moment with you
-            </p>
-            <p className="mx-auto mt-8 max-w-2xl text-lg font-medium leading-8 text-[#211b16]/78 sm:text-2xl sm:leading-10">
-              To experience it, place your finger on the screen and move it along the surface.
-            </p>
-            <div className="mx-auto my-8 h-px w-36 bg-[#211b16]/24" />
-            <p className="mx-auto max-w-xl text-sm font-semibold uppercase leading-7 tracking-[0.16em] text-[#756853] sm:text-base">
-              You have 3 cycles of this Moment before it fades. Visit Momentoria to make and share your own Moment.
-            </p>
-          </div>
-        </div>
-      ) : null}
+      <canvas
+        ref={introOverlayRef}
+        className={`pointer-events-none absolute inset-0 z-20 h-full w-full shadow-[inset_0_0_120px_rgba(33,27,22,0.24)] ${
+          introVisible && !disabled ? "block" : "hidden"
+        }`}
+        aria-label="Someone has shared a Moment with you. To experience it, place your finger on the screen and move it along the surface. You have 3 cycles of this Moment before it fades. Visit Momentoria to make and share your own Moment."
+      />
       <div className="absolute bottom-5 right-5 z-10 flex items-end gap-3 text-right text-cream sm:bottom-8 sm:right-8">
         <div>
           <p ref={statusRef} className="text-xs font-semibold uppercase tracking-[0.16em] text-cream/74">
