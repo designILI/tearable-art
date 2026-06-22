@@ -16,14 +16,13 @@ Users upload exactly 5 images, add a title and short message, and receive a priv
 
 ## How Uploads Work
 
-The create form uses Vercel Blob client uploads.
+The create form compresses images in the browser before sending them to the API.
 
 1. The route validates the title, message, optional recipient name, and exactly 5 image files.
-2. The browser asks `app/api/blob/upload/route.ts` for a short-lived Blob upload token.
-3. Each image uploads directly from the browser to Vercel Blob under `momentoria/{id}/`.
-4. The browser posts the returned Blob URLs to `app/api/momentoria/route.ts`.
-5. The API saves `metadata.json` to Vercel Blob with the title, message, recipient name, image URLs, and creation time.
-6. It returns `/m/{id}` as the private share URL.
+2. The browser resizes and compresses each image so full-resolution phone photos do not hit Vercel Function payload limits.
+3. The API uploads those compressed images to Vercel Blob under `momentoria/{id}/`.
+4. The API saves `metadata.json` to Vercel Blob with the title, message, recipient name, image URLs, and creation time.
+5. It returns `/m/{id}` as the private share URL.
 
 This keeps the MVP deployable without a separate database. For a larger product, replace the metadata helpers in `lib/momentoria.ts` with Vercel Postgres, Neon, Supabase, or another database.
 

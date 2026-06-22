@@ -1,7 +1,6 @@
 "use client";
 
 import Image from "next/image";
-import { upload } from "@vercel/blob/client";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 const layerLabels = ["Top layer", "Layer 2", "Layer 3", "Layer 4", "Final layer"];
@@ -92,75 +91,37 @@ export function CreateMomentoriaForm() {
 
     try {
       /*
-        Images go straight from the browser to Vercel Blob. The API route only
-        grants a short-lived upload token, so large files no longer pass through
-        a Vercel Function body and avoid FUNCTION_PAYLOAD_TOO_LARGE errors.
+        Images are compressed in the browser before they are sent to the API.
+        That keeps the request small enough for Vercel Functions while avoiding
+        the Vercel Blob client-upload callback issue on localhost.
       */
-      const uploadedImageUrls: string[] = [];
+      const compressedFormData = new FormData();
+      compressedFormData.append("id", id);
+      compressedFormData.append("title", String(formData.get("title") ?? ""));
+      compressedFormData.append("message", String(formData.get("message") ?? ""));
+      compressedFormData.append("recipientName", String(formData.get("recipientName") ?? ""));
 
       for (let index = 0; index < files.length; index += 1) {
         const file = files[index];
         setUploadStatus(`Preparing image ${index + 1} of ${files.length}...`);
-        setUploadProgress(Math.max(uploadProgress, Math.round((index / files.length) * 100)));
+        setUploadProgress(Math.round((index / files.length) * 50));
 
         const uploadFile = await prepareImageForUpload(file);
-        const extension = cleanFileName(uploadFile.name).split(".").pop() || "jpg";
-
-        setUploadStatus(`Uploading image ${index + 1} of ${files.length} (${formatFileSize(uploadFile.size)})...`);
-        setUploadProgress(Math.round((index / files.length) * 100));
-
-        const abortController = new AbortController();
-        const timeout = window.setTimeout(() => abortController.abort(), UPLOAD_TIMEOUT_MS);
-
-        let imageUploadComplete = false;
-
-        try {
-          const blob = await upload(`momentoria/${id}/layer-${index + 1}.${extension}`, uploadFile, {
-            access: "public",
-            handleUploadUrl: "/api/blob/upload",
-            contentType: uploadFile.type,
-            multipart: uploadFile.size > 8 * 1024 * 1024,
-            abortSignal: abortController.signal,
-            onUploadProgress: ({ percentage }) => {
-              const nextProgress = Math.max(1, Math.round(((index + percentage / 100) / files.length) * 100));
-              setUploadProgress(nextProgress);
-
-              if (percentage >= 100 && !imageUploadComplete) {
-                imageUploadComplete = true;
-                setUploadStatus(`Finalizing image ${index + 1} of ${files.length}...`);
-              }
-            },
-          });
-
-          uploadedImageUrls.push(blob.url);
-          setUploadProgress(Math.round(((index + 1) / files.length) * 100));
-        } catch (uploadError) {
-          if (abortController.signal.aborted) {
-            throw new Error(`Image ${index + 1} took too long to upload. The photo was compressed first, so this may be a slow network or Blob service issue. Try again in a minute.`);
-          }
-
-          throw uploadError;
-        } finally {
-          window.clearTimeout(timeout);
-        }
+        compressedFormData.append("images", uploadFile);
+        setUploadProgress(Math.round(((index + 1) / files.length) * 50));
       }
 
-      setUploadProgress(100);
-      setUploadStatus("Saving Momentoria...");
+      setUploadStatus(`Uploading compressed images (${formatFileSize(totalFileSize(compressedFormData.getAll("images")))} total)...`);
+      setUploadProgress(60);
+
+      const abortController = new AbortController();
+      const timeout = window.setTimeout(() => abortController.abort(), UPLOAD_TIMEOUT_MS);
 
       const response = await fetch("/api/momentoria", {
         method: "POST",
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          id,
-          title: formData.get("title"),
-          message: formData.get("message"),
-          recipientName: formData.get("recipientName"),
-          imageUrls: uploadedImageUrls,
-        }),
-      });
+        body: compressedFormData,
+        signal: abortController.signal,
+      }).finally(() => window.clearTimeout(timeout));
       const result = (await response.json()) as { url?: string; error?: string };
 
       if (!response.ok || !result.url) {
@@ -168,9 +129,16 @@ export function CreateMomentoriaForm() {
         return;
       }
 
+      setUploadProgress(100);
+      setUploadStatus("Momentoria created.");
       setShareUrl(`${window.location.origin}${result.url}`);
     } catch (uploadError) {
-      const message = uploadError instanceof Error ? uploadError.message : "Could not upload these images.";
+      const message =
+        uploadError instanceof DOMException && uploadError.name === "AbortError"
+          ? "The upload took too long. Try again, or choose a stronger connection."
+          : uploadError instanceof Error
+            ? uploadError.message
+            : "Could not upload these images.";
       setError(message);
     } finally {
       setSubmitting(false);
@@ -385,4 +353,8 @@ function loadImage(file: File) {
 function formatFileSize(bytes: number) {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function totalFileSize(values: FormDataEntryValue[]) {
+  return values.reduce((total, value) => total + (value instanceof File ? value.size : 0), 0);
 }
