@@ -122,7 +122,7 @@ export function CreateMomentoriaForm() {
         body: compressedFormData,
         signal: abortController.signal,
       }).finally(() => window.clearTimeout(timeout));
-      const result = (await response.json()) as { url?: string; error?: string };
+      const result = await readJsonResponse(response);
 
       if (!response.ok || !result.url) {
         setError(result.error || "Could not create this Momentoria.");
@@ -357,4 +357,22 @@ function formatFileSize(bytes: number) {
 
 function totalFileSize(values: FormDataEntryValue[]) {
   return values.reduce((total, value) => total + (value instanceof File ? value.size : 0), 0);
+}
+
+async function readJsonResponse(response: Response) {
+  const text = await response.text();
+
+  if (!text) {
+    return {
+      error: response.ok ? "The server returned an empty response." : `The server returned ${response.status} without details.`,
+    } as { url?: string; error?: string };
+  }
+
+  try {
+    return JSON.parse(text) as { url?: string; error?: string };
+  } catch {
+    return {
+      error: response.ok ? "The server returned an unreadable response." : `The server returned ${response.status}: ${text.slice(0, 160)}`,
+    };
+  }
 }

@@ -7,7 +7,7 @@ import {
   type MomentoriaMetadata,
 } from "@/lib/momentoria";
 
-export const runtime = "nodejs";
+export const runtime = "edge";
 
 export async function POST(request: Request) {
   try {
