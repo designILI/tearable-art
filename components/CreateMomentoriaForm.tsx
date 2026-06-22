@@ -95,11 +95,7 @@ export function CreateMomentoriaForm() {
         That keeps the request small enough for Vercel Functions while avoiding
         the Vercel Blob client-upload callback issue on localhost.
       */
-      const compressedFormData = new FormData();
-      compressedFormData.append("id", id);
-      compressedFormData.append("title", String(formData.get("title") ?? ""));
-      compressedFormData.append("message", String(formData.get("message") ?? ""));
-      compressedFormData.append("recipientName", String(formData.get("recipientName") ?? ""));
+      const imageUploads: Array<{ data: string; name: string; type: string; size: number }> = [];
 
       for (let index = 0; index < files.length; index += 1) {
         const file = files[index];
@@ -107,11 +103,16 @@ export function CreateMomentoriaForm() {
         setUploadProgress(Math.round((index / files.length) * 50));
 
         const uploadFile = await prepareImageForUpload(file);
-        compressedFormData.append("images", uploadFile);
+        imageUploads.push({
+          data: await fileToBase64(uploadFile),
+          name: uploadFile.name,
+          type: uploadFile.type,
+          size: uploadFile.size,
+        });
         setUploadProgress(Math.round(((index + 1) / files.length) * 50));
       }
 
-      setUploadStatus(`Uploading compressed images (${formatFileSize(totalFileSize(compressedFormData.getAll("images")))} total)...`);
+      setUploadStatus(`Uploading compressed images (${formatFileSize(totalUploadSize(imageUploads))} total)...`);
       setUploadProgress(60);
 
       const abortController = new AbortController();
@@ -119,7 +120,16 @@ export function CreateMomentoriaForm() {
 
       const response = await fetch("/api/momentoria", {
         method: "POST",
-        body: compressedFormData,
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          id,
+          title: formData.get("title"),
+          message: formData.get("message"),
+          recipientName: formData.get("recipientName"),
+          imageUploads,
+        }),
         signal: abortController.signal,
       }).finally(() => window.clearTimeout(timeout));
       const result = await readJsonResponse(response);
@@ -355,8 +365,8 @@ function formatFileSize(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function totalFileSize(values: FormDataEntryValue[]) {
-  return values.reduce((total, value) => total + (value instanceof File ? value.size : 0), 0);
+function totalUploadSize(values: Array<{ size: number }>) {
+  return values.reduce((total, value) => total + value.size, 0);
 }
 
 async function readJsonResponse(response: Response) {
@@ -375,4 +385,17 @@ async function readJsonResponse(response: Response) {
       error: response.ok ? "The server returned an unreadable response." : `The server returned ${response.status}: ${text.slice(0, 160)}`,
     };
   }
+}
+
+async function fileToBase64(file: File) {
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  let binary = "";
+
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  }
+
+  return window.btoa(binary);
 }

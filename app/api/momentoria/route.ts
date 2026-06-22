@@ -7,7 +7,7 @@ import {
   type MomentoriaMetadata,
 } from "@/lib/momentoria";
 
-export const runtime = "edge";
+export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try {
@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     const contentType = request.headers.get("content-type") ?? "";
 
     if (contentType.includes("multipart/form-data")) {
-      return createFromCompressedFormData(request);
+      return NextResponse.json({ error: "This upload method changed. Refresh the page and try again." }, { status: 415 });
     }
 
     const body = (await request.json()) as {
@@ -30,6 +30,11 @@ export async function POST(request: Request) {
       message?: string;
       recipientName?: string;
       imageUrls?: string[];
+      imageUploads?: Array<{
+        data: string;
+        name: string;
+        type: string;
+      }>;
     };
 
     const id = String(body.id ?? "");
@@ -37,6 +42,7 @@ export async function POST(request: Request) {
     const message = cleanText(body.message ?? "", 220);
     const recipientName = cleanText(body.recipientName ?? "", 60);
     const imageUrls = Array.isArray(body.imageUrls) ? body.imageUrls.filter((url) => typeof url === "string") : [];
+    const imageUploads = Array.isArray(body.imageUploads) ? body.imageUploads : [];
 
     if (!title || !message) {
       return NextResponse.json({ error: "Add a title and short message." }, { status: 400 });
@@ -46,11 +52,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid Momentoria id." }, { status: 400 });
     }
 
-    if (imageUrls.length !== 5) {
+    const savedImageUrls =
+      imageUploads.length > 0
+        ? await saveBase64Images(id, imageUploads)
+        : imageUrls.length === 5
+          ? imageUrls
+          : [];
+
+    if (savedImageUrls.length !== 5) {
       return NextResponse.json({ error: "Upload exactly 5 images." }, { status: 400 });
     }
 
-    const invalidUrl = imageUrls.find((url) => !url.includes(".public.blob.vercel-storage.com/momentoria/"));
+    const invalidUrl = savedImageUrls.find((url) => !url.includes(".public.blob.vercel-storage.com/momentoria/"));
     if (invalidUrl) {
       return NextResponse.json({ error: "One uploaded image URL is not from Vercel Blob." }, { status: 400 });
     }
@@ -60,7 +73,7 @@ export async function POST(request: Request) {
       title,
       message,
       recipientName: recipientName || undefined,
-      imageUrls,
+      imageUrls: savedImageUrls,
       createdAt: new Date().toISOString(),
     };
 
@@ -73,40 +86,38 @@ export async function POST(request: Request) {
   }
 }
 
-async function createFromCompressedFormData(request: Request) {
-  const formData = await request.formData();
-  const id = String(formData.get("id") ?? "");
-  const title = cleanText(formData.get("title"), 80);
-  const message = cleanText(formData.get("message"), 220);
-  const recipientName = cleanText(formData.get("recipientName"), 60);
-  const images = formData.getAll("images").filter((file): file is File => file instanceof File && file.size > 0);
-
-  if (!title || !message) {
-    return NextResponse.json({ error: "Add a title and short message." }, { status: 400 });
+async function saveBase64Images(
+  id: string,
+  imageUploads: Array<{
+    data: string;
+    name: string;
+    type: string;
+  }>,
+) {
+  if (imageUploads.length !== 5) {
+    return [];
   }
 
-  if (!/^[a-f0-9]{18}$/i.test(id)) {
-    return NextResponse.json({ error: "Invalid Momentoria id." }, { status: 400 });
-  }
-
-  if (images.length !== 5) {
-    return NextResponse.json({ error: "Upload exactly 5 images." }, { status: 400 });
-  }
-
-  const invalidImage = images.find((image) => !image.type.startsWith("image/"));
+  const invalidImage = imageUploads.find((image) => !image.type.startsWith("image/") || !image.data);
   if (invalidImage) {
-    return NextResponse.json({ error: `${invalidImage.name} is not an image.` }, { status: 400 });
+    throw new Error(`${invalidImage.name || "One file"} is not an image.`);
+  }
+
+  const totalBytes = imageUploads.reduce((total, image) => total + Buffer.byteLength(image.data, "base64"), 0);
+  if (totalBytes > 3 * 1024 * 1024) {
+    throw new Error("Compressed images are still too large. Try smaller images.");
   }
 
   /*
-    The browser compresses images before submitting this form, so the server
-    receives small files and can safely write them to Blob without hitting the
-    Vercel Function payload limit that full-resolution phone photos caused.
+    The browser compresses images and sends them as base64 JSON. This avoids
+    multipart parsing issues on Vercel while keeping the request small enough
+    for a serverless function.
   */
-  const imageUrls = await Promise.all(
-    images.map(async (image, index) => {
+  return Promise.all(
+    imageUploads.map(async (image, index) => {
       const extension = cleanFileName(image.name).split(".").pop() || "jpg";
-      const blob = await put(`momentoria/${id}/layer-${index + 1}.${extension}`, image, {
+      const buffer = Buffer.from(image.data, "base64");
+      const blob = await put(`momentoria/${id}/layer-${index + 1}.${extension}`, buffer, {
         access: "public",
         addRandomSuffix: false,
         contentType: image.type,
@@ -114,17 +125,4 @@ async function createFromCompressedFormData(request: Request) {
       return blob.url;
     }),
   );
-
-  const metadata: MomentoriaMetadata = {
-    id,
-    title,
-    message,
-    recipientName: recipientName || undefined,
-    imageUrls,
-    createdAt: new Date().toISOString(),
-  };
-
-  await saveMomentoriaMetadata(metadata);
-
-  return NextResponse.json({ id, url: `/m/${id}` });
 }

@@ -20,9 +20,10 @@ The create form compresses images in the browser before sending them to the API.
 
 1. The route validates the title, message, optional recipient name, and exactly 5 image files.
 2. The browser resizes and compresses each image so full-resolution phone photos do not hit Vercel Function payload limits.
-3. The API uploads those compressed images to Vercel Blob under `momentoria/{id}/`.
-4. The API saves `metadata.json` to Vercel Blob with the title, message, recipient name, image URLs, and creation time.
-5. It returns `/m/{id}` as the private share URL.
+3. The browser sends the compressed images as a small JSON payload to avoid multipart parsing issues.
+4. The API uploads those compressed images to Vercel Blob under `momentoria/{id}/`.
+5. The API saves `metadata.json` to Vercel Blob with the title, message, recipient name, image URLs, and creation time.
+6. It returns `/m/{id}` as the private share URL.
 
 This keeps the MVP deployable without a separate database. For a larger product, replace the metadata helpers in `lib/momentoria.ts` with Vercel Postgres, Neon, Supabase, or another database.
 
