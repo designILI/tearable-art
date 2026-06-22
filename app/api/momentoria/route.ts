@@ -82,7 +82,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ id, url: `/m/${id}` });
   } catch (error) {
     console.error(error);
-    return NextResponse.json({ error: "Could not create this Momentoria." }, { status: 500 });
+    return NextResponse.json({ error: readableError(error) }, { status: 500 });
   }
 }
 
@@ -117,7 +117,7 @@ async function saveBase64Images(
     imageUploads.map(async (image, index) => {
       const extension = cleanFileName(image.name).split(".").pop() || "jpg";
       const buffer = Buffer.from(image.data, "base64");
-      const blob = await put(`momentoria/${id}/layer-${index + 1}.${extension}`, buffer, {
+      const blob = await put(`momentoria/${id}/layer-${index + 1}-${crypto.randomUUID()}.${extension}`, buffer, {
         access: "public",
         addRandomSuffix: false,
         contentType: image.type,
@@ -125,4 +125,12 @@ async function saveBase64Images(
       return blob.url;
     }),
   );
+}
+
+function readableError(error: unknown) {
+  if (error instanceof Error && error.message) {
+    return error.message.slice(0, 240);
+  }
+
+  return "Could not create this Momentoria.";
 }
