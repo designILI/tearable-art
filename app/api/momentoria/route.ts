@@ -129,6 +129,10 @@ async function saveBase64Images(
 
 function readableError(error: unknown) {
   if (error instanceof Error && error.message) {
+    if (error.message.includes("Cannot use public access on a private store")) {
+      return "This Vercel Blob store is private. Create or connect a public Blob store, redeploy, and try again.";
+    }
+
     return error.message.slice(0, 240);
   }
 

@@ -50,9 +50,11 @@ Visit:
 - `http://localhost:3000/create` for the upload form
 - `http://localhost:3000/m/demo` for a local tearable share preview using the bundled sample images
 
-Creating a real Momentoria locally requires `BLOB_READ_WRITE_TOKEN`.
+Creating a real Momentoria locally requires `BLOB_READ_WRITE_TOKEN` from a public Vercel Blob store.
 
 The create page shows a Blob storage status message. If it says `Blob storage connected`, the app can see `BLOB_READ_WRITE_TOKEN`. A successful submit is the final proof: it creates five files and `metadata.json` in Vercel Blob, then displays the private link.
+
+This MVP uses public Blob file URLs behind an unguessable Momentoria share link. In Vercel Storage, choose or create a public Blob store. A private Blob store will reject uploads with `Cannot use public access on a private store`.
 
 ## Checks
 
@@ -70,7 +72,7 @@ Deploy to Vercel as a standard Next.js project.
 2. Import the repo in Vercel.
 3. Use the `Next.js` framework preset. This app is not a static HTML site anymore, and the homepage is `app/page.tsx`.
 4. Leave the output directory empty so Vercel uses Next.js' `.next` build output.
-5. Connect a Vercel Blob store.
+5. Connect a public Vercel Blob store.
 6. Confirm `BLOB_READ_WRITE_TOKEN` is present.
 7. Deploy.
 
