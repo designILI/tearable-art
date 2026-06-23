@@ -6,6 +6,7 @@ import {
   saveMomentoriaMetadata,
   type MomentoriaMetadata,
 } from "@/lib/momentoria";
+import { logCreatedMomentoriaToSheet } from "@/lib/googleSheets";
 
 export const runtime = "nodejs";
 
@@ -78,6 +79,20 @@ export async function POST(request: Request) {
     };
 
     await saveMomentoriaMetadata(metadata);
+    const shareUrl = new URL(`/m/${id}`, request.url).toString();
+
+    try {
+      await logCreatedMomentoriaToSheet({
+        id,
+        title,
+        recipientName: recipientName || undefined,
+        createdAt: metadata.createdAt,
+        shareUrl,
+        imageCount: savedImageUrls.length,
+      });
+    } catch (loggingError) {
+      console.error("Momentoria was created, but Google Sheets logging failed.", loggingError);
+    }
 
     return NextResponse.json({ id, url: `/m/${id}` });
   } catch (error) {

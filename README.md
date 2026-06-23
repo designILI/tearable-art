@@ -37,6 +37,32 @@ BLOB_READ_WRITE_TOKEN=vercel_blob_rw_...
 
 On Vercel, this is usually added automatically when you connect a Blob store to the project. Locally, put it in `.env.local`.
 
+### Optional Google Sheets Link Log
+
+Momentoria can append each generated private link to a Google Sheet. This is optional: if the Google Sheets variables are missing, Momentoria creation still works and logging is skipped.
+
+1. Create a Google Sheet.
+2. Add a tab named `Created Links`.
+3. Add these header cells in row 1:
+
+```text
+Created At | Momentoria ID | Private Link | Title | Recipient Name | Image Count | Event
+```
+
+4. Create a Google Cloud service account with access to the Google Sheets API.
+5. Copy the service account email.
+6. Share the Google Sheet with that service account email as an editor.
+7. Add these variables locally and in Vercel:
+
+```bash
+GOOGLE_SHEETS_SPREADSHEET_ID=your_google_sheet_id
+GOOGLE_SHEETS_CLIENT_EMAIL=your-service-account@your-project.iam.gserviceaccount.com
+GOOGLE_SHEETS_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+GOOGLE_SHEETS_LINKS_SHEET_NAME="Created Links"
+```
+
+`GOOGLE_SHEETS_LINKS_SHEET_NAME` is optional. If omitted, the app uses `Created Links`.
+
 ## Local Development
 
 ```bash
@@ -52,7 +78,7 @@ Visit:
 
 Creating a real Momentoria locally requires `BLOB_READ_WRITE_TOKEN` from a public Vercel Blob store.
 
-The create page shows a Blob storage status message. If it says `Blob storage connected`, the app can see `BLOB_READ_WRITE_TOKEN`. A successful submit is the final proof: it creates five files and `metadata.json` in Vercel Blob, then displays the private link.
+A successful submit is the final proof: it creates five files and `metadata.json` in Vercel Blob, displays the private link, and, when Google Sheets variables are configured, appends the created link to the spreadsheet.
 
 This MVP uses public Blob file URLs behind an unguessable Momentoria share link. In Vercel Storage, choose or create a public Blob store. A private Blob store will reject uploads with `Cannot use public access on a private store`.
 
