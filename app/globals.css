@@ -42,7 +42,7 @@ textarea {
 }
 
 .momentoria-end-card {
-  animation: momentoria-end-card 1200ms ease-out both;
+  animation: momentoria-end-card 2400ms ease-out both;
 }
 
 @keyframes momentoria-end-card {

@@ -10,26 +10,21 @@ type ShareMomentoriaProps = {
 
 export function ShareMomentoria({ momentoria }: ShareMomentoriaProps) {
   const storageKey = `momentoria:${momentoria.id}:complete-reveals`;
-  const savedKey = `momentoria:${momentoria.id}:saved-permanently`;
   const endCardTimerRef = useRef<number | null>(null);
   const [completeReveals, setCompleteReveals] = useState(0);
   const [showEndCard, setShowEndCard] = useState(false);
-  const [savedPermanently, setSavedPermanently] = useState(false);
+  const [showComingSoon, setShowComingSoon] = useState(false);
   const [momentoriaLink, setMomentoriaLink] = useState("https://tearable-art.vercel.app");
   const [storyResetKey, setStoryResetKey] = useState(0);
 
   useEffect(() => {
     const storedReveals = Number(window.localStorage.getItem(storageKey) || "0");
-    const storedSaved = window.localStorage.getItem(savedKey) === "true";
     setCompleteReveals(storedReveals);
-    setSavedPermanently(storedSaved);
-    setShowEndCard(!storedSaved && storedReveals >= 3);
+    setShowEndCard(storedReveals >= 3);
     setMomentoriaLink(window.location.origin);
-  }, [savedKey, storageKey]);
+  }, [storageKey]);
 
   const handleCompleteReveal = useCallback(() => {
-    if (savedPermanently) return;
-
     setCompleteReveals((current) => {
       const next = Math.min(current + 1, 3);
       window.localStorage.setItem(storageKey, String(next));
@@ -39,10 +34,11 @@ export function ShareMomentoria({ momentoria }: ShareMomentoriaProps) {
       }
       return next;
     });
-  }, [savedPermanently, storageKey]);
+  }, [storageKey]);
 
   const handleReset = useCallback(() => {
     setShowEndCard(false);
+    setShowComingSoon(false);
     if (endCardTimerRef.current) {
       window.clearTimeout(endCardTimerRef.current);
       endCardTimerRef.current = null;
@@ -53,6 +49,7 @@ export function ShareMomentoria({ momentoria }: ShareMomentoriaProps) {
     window.localStorage.setItem(storageKey, "0");
     setCompleteReveals(0);
     setShowEndCard(false);
+    setShowComingSoon(false);
     setStoryResetKey((current) => current + 1);
     if (endCardTimerRef.current) {
       window.clearTimeout(endCardTimerRef.current);
@@ -61,13 +58,8 @@ export function ShareMomentoria({ momentoria }: ShareMomentoriaProps) {
   }, [storageKey]);
 
   const handleSavePermanently = useCallback(() => {
-    window.localStorage.setItem(savedKey, "true");
-    window.localStorage.setItem(storageKey, "0");
-    setSavedPermanently(true);
-    setCompleteReveals(0);
-    setShowEndCard(false);
-    setStoryResetKey((current) => current + 1);
-  }, [savedKey, storageKey]);
+    setShowComingSoon(true);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -82,7 +74,7 @@ export function ShareMomentoria({ momentoria }: ShareMomentoriaProps) {
         imageUrls={momentoria.imageUrls}
         title={momentoria.title}
         disabled={showEndCard}
-        hideReset={!savedPermanently && completeReveals >= 3}
+        hideReset={completeReveals >= 3}
         onCompleteReveal={handleCompleteReveal}
         onReset={handleReset}
       />
@@ -98,40 +90,58 @@ export function ShareMomentoria({ momentoria }: ShareMomentoriaProps) {
       </section>
 
       <div className="pointer-events-none absolute bottom-5 left-5 z-10 rounded-full border border-cream/20 bg-dusk/35 px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-cream/78 backdrop-blur sm:left-8">
-        {savedPermanently ? "Saved" : `${Math.min(completeReveals, 3)} / 3 reveals`}
+        {Math.min(completeReveals, 3)} / 3 reveals
       </div>
 
       {showEndCard ? (
         <div className="momentoria-end-card absolute inset-0 z-20 grid place-items-center bg-dusk/88 px-5 text-center backdrop-blur-md">
           <div className="max-w-2xl">
-            <p className="font-serif text-4xl font-semibold leading-tight text-cream sm:text-6xl">
-              Hope you enjoyed the Moment!
-            </p>
-            <p className="mt-6 text-xl font-semibold text-cream/82 sm:text-2xl">Let the sender know!</p>
-            <p className="mt-8 text-sm uppercase tracking-[0.18em] text-cream/54">Make your own</p>
-            <a
-              href={momentoriaLink}
-              className="mt-3 inline-flex min-h-12 items-center justify-center rounded-full border border-cream/32 px-6 text-sm font-semibold text-cream transition hover:border-cream/70 hover:bg-cream/10"
-            >
-              Visit Momentoria
-            </a>
-            <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <button
-                type="button"
-                onClick={handleResetCycles}
-                className="min-h-12 rounded-full border border-cream/30 px-5 text-sm font-semibold text-cream transition hover:border-cream/70 hover:bg-cream/10"
-              >
-                Reset moment cycles
-              </button>
-              <button
-                type="button"
-                onClick={handleSavePermanently}
-                className="min-h-12 rounded-full bg-cream px-5 text-sm font-semibold text-dusk transition hover:bg-cream/86"
-              >
-                Save permanently
-              </button>
-            </div>
-            <p className="mt-6 text-xs uppercase tracking-[0.16em] text-cream/42">This Momentoria has faded.</p>
+            {showComingSoon ? (
+              <>
+                <p className="font-serif text-4xl font-semibold leading-tight text-cream sm:text-6xl">Feature coming soon</p>
+                <p className="mx-auto mt-5 max-w-md text-base leading-7 text-cream/70">
+                  Permanent saving will arrive in a future Momentoria update.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowComingSoon(false)}
+                  className="mt-8 min-h-12 rounded-full border border-cream/30 px-5 text-sm font-semibold text-cream transition hover:border-cream/70 hover:bg-cream/10"
+                >
+                  Back
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="font-serif text-4xl font-semibold leading-tight text-cream sm:text-6xl">
+                  Hope you enjoyed the Moment!
+                </p>
+                <p className="mt-6 text-xl font-semibold text-cream/82 sm:text-2xl">Let the sender know!</p>
+                <p className="mt-8 text-sm uppercase tracking-[0.18em] text-cream/54">Make your own</p>
+                <a
+                  href={momentoriaLink}
+                  className="mt-3 inline-flex min-h-12 items-center justify-center rounded-full border border-cream/32 px-6 text-sm font-semibold text-cream transition hover:border-cream/70 hover:bg-cream/10"
+                >
+                  Visit Momentoria
+                </a>
+                <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={handleResetCycles}
+                    className="min-h-12 rounded-full border border-cream/30 px-5 text-sm font-semibold text-cream transition hover:border-cream/70 hover:bg-cream/10"
+                  >
+                    Reset moment cycles
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSavePermanently}
+                    className="min-h-12 rounded-full border border-cream/30 px-5 text-sm font-semibold text-cream transition hover:border-cream/70 hover:bg-cream/10"
+                  >
+                    Save permanently
+                  </button>
+                </div>
+                <p className="mt-6 text-xs uppercase tracking-[0.16em] text-cream/42">This Momentoria has faded.</p>
+              </>
+            )}
           </div>
         </div>
       ) : null}

@@ -62,9 +62,19 @@ export function TearableStory({ imageUrls, title, disabled = false, hideReset = 
   const introOverlayRef = useRef<HTMLCanvasElement | null>(null);
   const statusRef = useRef<HTMLParagraphElement | null>(null);
   const resetRef = useRef<HTMLButtonElement | null>(null);
+  const disabledRef = useRef(disabled);
+  const onCompleteRevealRef = useRef(onCompleteReveal);
+  const onResetRef = useRef(onReset);
   const completedRef = useRef(false);
   const introDismissedRef = useRef(false);
   const [introVisible, setIntroVisible] = useState(true);
+  const [introLeaving, setIntroLeaving] = useState(false);
+
+  useEffect(() => {
+    disabledRef.current = disabled;
+    onCompleteRevealRef.current = onCompleteReveal;
+    onResetRef.current = onReset;
+  }, [disabled, onCompleteReveal, onReset]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -127,7 +137,6 @@ export function TearableStory({ imageUrls, title, disabled = false, hideReset = 
       brush: 0.055,
       seam: [] as SeamPoint[],
       tearPercent: 0,
-      introDroppedDuringGesture: false,
       peelTransition: null as { layer: StoryLayer; startedAt: number; duration: number } | null,
     };
     let storyAudio: StoryAudio | null = null;
@@ -294,36 +303,36 @@ export function TearableStory({ imageUrls, title, disabled = false, hideReset = 
       ctx.fillRect(0, 0, state.width, state.height);
 
       const centerX = state.width / 2;
-      const maxWidth = Math.min(state.width * 0.76, 760);
-      const titleSize = clamp(state.width * 0.055, 34, 76);
-      const bodySize = clamp(state.width * 0.024, 17, 25);
-      const smallSize = clamp(state.width * 0.018, 13, 17);
+      const maxWidth = Math.min(state.width * 0.7, 820);
+      const titleSize = clamp(Math.min(state.width, state.height) * 0.072, 32, 62);
+      const bodySize = clamp(Math.min(state.width, state.height) * 0.032, 17, 24);
+      const smallSize = clamp(Math.min(state.width, state.height) * 0.02, 12, 16);
 
       ctx.save();
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillStyle = dark;
       ctx.font = `600 ${titleSize}px Georgia, serif`;
-      wrapText(ctx, "Someone has shared a Moment with you", centerX, state.height * 0.31, maxWidth, titleSize * 1.08);
+      drawTextBlock(ctx, "Someone has shared a Moment with you", centerX, state.height * 0.28, maxWidth, titleSize * 1.08);
 
       ctx.font = `500 ${bodySize}px Arial, sans-serif`;
       ctx.fillStyle = "rgba(33, 27, 22, 0.78)";
-      wrapText(
+      drawTextBlock(
         ctx,
         "To experience it, place your finger on the screen and move it along the surface.",
         centerX,
-        state.height * 0.5,
+        state.height * 0.54,
         maxWidth,
         bodySize * 1.45,
       );
 
       ctx.font = `600 ${smallSize}px Arial, sans-serif`;
       ctx.fillStyle = mid;
-      wrapText(
+      drawTextBlock(
         ctx,
         "You have 3 cycles of this Moment before it fades. Visit Momentoria to make and share your own Moment.",
         centerX,
-        state.height * 0.68,
+        state.height * 0.74,
         Math.min(maxWidth, 620),
         smallSize * 1.5,
       );
@@ -332,8 +341,8 @@ export function TearableStory({ imageUrls, title, disabled = false, hideReset = 
       ctx.strokeStyle = dark;
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(centerX - maxWidth * 0.25, state.height * 0.41);
-      ctx.lineTo(centerX + maxWidth * 0.25, state.height * 0.41);
+      ctx.moveTo(centerX - maxWidth * 0.18, state.height * 0.43);
+      ctx.lineTo(centerX + maxWidth * 0.18, state.height * 0.43);
       ctx.stroke();
       ctx.restore();
     }
@@ -419,7 +428,7 @@ export function TearableStory({ imageUrls, title, disabled = false, hideReset = 
     }
 
     function beginPointer(event: PointerEvent) {
-      if (disabled || state.peelTransition) return;
+      if (disabledRef.current || state.peelTransition) return;
       if (introDismissedRef.current && state.activeLayer >= state.layers.length - 1) return;
 
       ensureAudio();
@@ -430,7 +439,6 @@ export function TearableStory({ imageUrls, title, disabled = false, hideReset = 
       state.velocity.set(0, 0);
       state.lastHead = null;
       state.seam = [];
-      state.introDroppedDuringGesture = false;
       state.tearing = true;
       state.brush = clamp(Math.min(state.width, state.height) * 0.075, 44, 96);
       stageCanvas.classList.add("is-tearing");
@@ -528,9 +536,8 @@ export function TearableStory({ imageUrls, title, disabled = false, hideReset = 
       state.lastHead.copy(state.head);
       if (introDismissedRef.current && layer) layer.maskTexture.needsUpdate = true;
 
-      if (!introDismissedRef.current && traveledSeamLength() > Math.max(state.width, state.height) * 0.85) {
+      if (!introDismissedRef.current && traveledSeamLength() > Math.max(state.width, state.height) * 0.55) {
         dropIntroCover();
-        state.introDroppedDuringGesture = true;
         state.seam = [];
         state.lastHead = state.head.clone();
       }
@@ -689,7 +696,7 @@ export function TearableStory({ imageUrls, title, disabled = false, hideReset = 
 
     function maybeDropLayer() {
       if (!introDismissedRef.current) {
-        if (traveledSeamLength() > Math.max(state.width, state.height) * 0.85) {
+        if (traveledSeamLength() > Math.max(state.width, state.height) * 0.55) {
           dropIntroCover();
         }
 
@@ -698,18 +705,13 @@ export function TearableStory({ imageUrls, title, disabled = false, hideReset = 
       }
 
       const layer = state.layers[state.activeLayer];
-      if (state.introDroppedDuringGesture) {
-        resetGesture();
-        return;
-      }
-
       if (!layer || state.activeLayer >= state.layers.length - 1) {
         resetGesture();
         return;
       }
 
       state.tearPercent = estimateRevealed(layer);
-      if (state.tearPercent > 0.35 || traveledSeamLength() > Math.max(state.width, state.height) * 1.2) {
+      if (state.tearPercent > 0.25 || traveledSeamLength() > Math.max(state.width, state.height) * 0.85) {
         startCenterPeel(layer);
       }
 
@@ -726,7 +728,7 @@ export function TearableStory({ imageUrls, title, disabled = false, hideReset = 
 
       if (state.activeLayer === state.layers.length - 1 && !completedRef.current) {
         completedRef.current = true;
-        window.setTimeout(() => onCompleteReveal?.(), 1200);
+        window.setTimeout(() => onCompleteRevealRef.current?.(), 1200);
       }
     }
 
@@ -829,7 +831,6 @@ export function TearableStory({ imageUrls, title, disabled = false, hideReset = 
       state.pointers.clear();
       state.lastHead = null;
       state.seam = [];
-      state.introDroppedDuringGesture = false;
       state.velocity.set(0, 0);
       stageCanvas.classList.remove("is-tearing");
       hideFlap();
@@ -840,6 +841,7 @@ export function TearableStory({ imageUrls, title, disabled = false, hideReset = 
 
     function resetArtwork() {
       completedRef.current = false;
+      setIntroLeaving(false);
       setIntroVisible(!introDismissedRef.current);
       state.peelTransition = null;
       state.activeLayer = 0;
@@ -847,7 +849,7 @@ export function TearableStory({ imageUrls, title, disabled = false, hideReset = 
       if (!introDismissedRef.current) resetIntroOverlayMask();
       resetGesture();
       updateStatus();
-      onReset?.();
+      onResetRef.current?.();
     }
 
     function updateStatus() {
@@ -860,7 +862,11 @@ export function TearableStory({ imageUrls, title, disabled = false, hideReset = 
     function dropIntroCover() {
       introDismissedRef.current = true;
       cutIntroOverlayPeel(Math.hypot(state.width, state.height));
-      setIntroVisible(false);
+      setIntroLeaving(true);
+      window.setTimeout(() => {
+        setIntroVisible(false);
+        setIntroLeaving(false);
+      }, 650);
       playDropSound();
       updateStatus();
     }
@@ -1015,7 +1021,7 @@ export function TearableStory({ imageUrls, title, disabled = false, hideReset = 
       source.stop(now + duration);
     }
 
-    function wrapText(
+    function drawTextBlock(
       ctx: CanvasRenderingContext2D,
       text: string,
       x: number,
@@ -1089,15 +1095,17 @@ export function TearableStory({ imageUrls, title, disabled = false, hideReset = 
       flap.material.dispose();
       renderer.dispose();
     };
-  }, [disabled, imageUrls, onCompleteReveal, onReset]);
+  }, [imageUrls, title]);
 
   return (
     <div className="relative h-full w-full overflow-hidden">
       <canvas ref={canvasRef} className="stage-canvas block h-full w-full" aria-label={title} />
       <canvas
         ref={introOverlayRef}
-        className={`pointer-events-none absolute inset-0 z-20 h-full w-full shadow-[inset_0_0_120px_rgba(33,27,22,0.24)] ${
+        className={`pointer-events-none absolute inset-0 z-20 h-full w-full shadow-[inset_0_0_120px_rgba(33,27,22,0.24)] transition-opacity duration-700 ${
           introVisible && !disabled ? "block" : "hidden"
+        } ${
+          introLeaving ? "opacity-0" : "opacity-100"
         }`}
         aria-label="Someone has shared a Moment with you. To experience it, place your finger on the screen and move it along the surface. You have 3 cycles of this Moment before it fades. Visit Momentoria to make and share your own Moment."
       />
