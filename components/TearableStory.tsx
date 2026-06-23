@@ -7,6 +7,7 @@ type TearableStoryProps = {
   imageUrls: string[];
   title: string;
   disabled?: boolean;
+  hideReset?: boolean;
   onCompleteReveal?: () => void;
   onReset?: () => void;
 };
@@ -56,7 +57,7 @@ const palettes: [string, string, string][] = [
   ["#c9ac8f", "#8a5743", "#160f0c"],
 ];
 
-export function TearableStory({ imageUrls, title, disabled = false, onCompleteReveal, onReset }: TearableStoryProps) {
+export function TearableStory({ imageUrls, title, disabled = false, hideReset = false, onCompleteReveal, onReset }: TearableStoryProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const introOverlayRef = useRef<HTMLCanvasElement | null>(null);
   const statusRef = useRef<HTMLParagraphElement | null>(null);
@@ -126,6 +127,7 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
       brush: 0.055,
       seam: [] as SeamPoint[],
       tearPercent: 0,
+      introDroppedDuringGesture: false,
       peelTransition: null as { layer: StoryLayer; startedAt: number; duration: number } | null,
     };
     let storyAudio: StoryAudio | null = null;
@@ -428,6 +430,7 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
       state.velocity.set(0, 0);
       state.lastHead = null;
       state.seam = [];
+      state.introDroppedDuringGesture = false;
       state.tearing = true;
       state.brush = clamp(Math.min(state.width, state.height) * 0.075, 44, 96);
       stageCanvas.classList.add("is-tearing");
@@ -524,6 +527,13 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
       }
       state.lastHead.copy(state.head);
       if (introDismissedRef.current && layer) layer.maskTexture.needsUpdate = true;
+
+      if (!introDismissedRef.current && traveledSeamLength() > Math.max(state.width, state.height) * 0.85) {
+        dropIntroCover();
+        state.introDroppedDuringGesture = true;
+        state.seam = [];
+        state.lastHead = state.head.clone();
+      }
     }
 
     function cutOrganicHole(layer: StoryLayer, point: THREE.Vector2, radius: number) {
@@ -688,6 +698,11 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
       }
 
       const layer = state.layers[state.activeLayer];
+      if (state.introDroppedDuringGesture) {
+        resetGesture();
+        return;
+      }
+
       if (!layer || state.activeLayer >= state.layers.length - 1) {
         resetGesture();
         return;
@@ -814,6 +829,7 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
       state.pointers.clear();
       state.lastHead = null;
       state.seam = [];
+      state.introDroppedDuringGesture = false;
       state.velocity.set(0, 0);
       stageCanvas.classList.remove("is-tearing");
       hideFlap();
@@ -1094,7 +1110,9 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
         <button
           ref={resetRef}
           type="button"
-          className="min-h-11 rounded-full border border-cream/28 bg-dusk/40 px-5 text-xs font-semibold uppercase tracking-[0.12em] text-cream backdrop-blur transition hover:border-cream/60 hover:bg-cream/12"
+          className={`min-h-11 rounded-full border border-cream/28 bg-dusk/40 px-5 text-xs font-semibold uppercase tracking-[0.12em] text-cream backdrop-blur transition hover:border-cream/60 hover:bg-cream/12 ${
+            hideReset ? "hidden" : ""
+          }`}
         >
           Reset
         </button>

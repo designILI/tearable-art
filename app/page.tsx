@@ -24,7 +24,7 @@ export default function HomePage() {
               href="/create"
               className="inline-flex min-h-12 items-center rounded-full bg-ink px-6 text-sm font-semibold text-cream shadow-soft transition hover:-translate-y-0.5 hover:bg-dusk"
             >
-              Create a Momentoria
+              Create a Moment
             </Link>
           </div>
         </div>

@@ -10,19 +10,26 @@ type ShareMomentoriaProps = {
 
 export function ShareMomentoria({ momentoria }: ShareMomentoriaProps) {
   const storageKey = `momentoria:${momentoria.id}:complete-reveals`;
+  const savedKey = `momentoria:${momentoria.id}:saved-permanently`;
   const endCardTimerRef = useRef<number | null>(null);
   const [completeReveals, setCompleteReveals] = useState(0);
   const [showEndCard, setShowEndCard] = useState(false);
+  const [savedPermanently, setSavedPermanently] = useState(false);
   const [momentoriaLink, setMomentoriaLink] = useState("https://tearable-art.vercel.app");
+  const [storyResetKey, setStoryResetKey] = useState(0);
 
   useEffect(() => {
     const storedReveals = Number(window.localStorage.getItem(storageKey) || "0");
+    const storedSaved = window.localStorage.getItem(savedKey) === "true";
     setCompleteReveals(storedReveals);
-    setShowEndCard(storedReveals >= 3);
+    setSavedPermanently(storedSaved);
+    setShowEndCard(!storedSaved && storedReveals >= 3);
     setMomentoriaLink(window.location.origin);
-  }, [storageKey]);
+  }, [savedKey, storageKey]);
 
   const handleCompleteReveal = useCallback(() => {
+    if (savedPermanently) return;
+
     setCompleteReveals((current) => {
       const next = Math.min(current + 1, 3);
       window.localStorage.setItem(storageKey, String(next));
@@ -32,7 +39,7 @@ export function ShareMomentoria({ momentoria }: ShareMomentoriaProps) {
       }
       return next;
     });
-  }, [storageKey]);
+  }, [savedPermanently, storageKey]);
 
   const handleReset = useCallback(() => {
     setShowEndCard(false);
@@ -41,6 +48,26 @@ export function ShareMomentoria({ momentoria }: ShareMomentoriaProps) {
       endCardTimerRef.current = null;
     }
   }, []);
+
+  const handleResetCycles = useCallback(() => {
+    window.localStorage.setItem(storageKey, "0");
+    setCompleteReveals(0);
+    setShowEndCard(false);
+    setStoryResetKey((current) => current + 1);
+    if (endCardTimerRef.current) {
+      window.clearTimeout(endCardTimerRef.current);
+      endCardTimerRef.current = null;
+    }
+  }, [storageKey]);
+
+  const handleSavePermanently = useCallback(() => {
+    window.localStorage.setItem(savedKey, "true");
+    window.localStorage.setItem(storageKey, "0");
+    setSavedPermanently(true);
+    setCompleteReveals(0);
+    setShowEndCard(false);
+    setStoryResetKey((current) => current + 1);
+  }, [savedKey, storageKey]);
 
   useEffect(() => {
     return () => {
@@ -51,9 +78,11 @@ export function ShareMomentoria({ momentoria }: ShareMomentoriaProps) {
   return (
     <main className="relative h-svh overflow-hidden bg-dusk text-cream">
       <TearableStory
+        key={storyResetKey}
         imageUrls={momentoria.imageUrls}
         title={momentoria.title}
         disabled={showEndCard}
+        hideReset={!savedPermanently && completeReveals >= 3}
         onCompleteReveal={handleCompleteReveal}
         onReset={handleReset}
       />
@@ -69,7 +98,7 @@ export function ShareMomentoria({ momentoria }: ShareMomentoriaProps) {
       </section>
 
       <div className="pointer-events-none absolute bottom-5 left-5 z-10 rounded-full border border-cream/20 bg-dusk/35 px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-cream/78 backdrop-blur sm:left-8">
-        {Math.min(completeReveals, 3)} / 3 reveals
+        {savedPermanently ? "Saved" : `${Math.min(completeReveals, 3)} / 3 reveals`}
       </div>
 
       {showEndCard ? (
@@ -86,6 +115,22 @@ export function ShareMomentoria({ momentoria }: ShareMomentoriaProps) {
             >
               Visit Momentoria
             </a>
+            <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={handleResetCycles}
+                className="min-h-12 rounded-full border border-cream/30 px-5 text-sm font-semibold text-cream transition hover:border-cream/70 hover:bg-cream/10"
+              >
+                Reset moment cycles
+              </button>
+              <button
+                type="button"
+                onClick={handleSavePermanently}
+                className="min-h-12 rounded-full bg-cream px-5 text-sm font-semibold text-dusk transition hover:bg-cream/86"
+              >
+                Save permanently
+              </button>
+            </div>
             <p className="mt-6 text-xs uppercase tracking-[0.16em] text-cream/42">This Momentoria has faded.</p>
           </div>
         </div>
