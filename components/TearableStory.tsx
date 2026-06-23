@@ -75,20 +75,12 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
     const statusElement = layerStatus;
     const introOverlayCtx = introOverlayCanvas?.getContext("2d") ?? null;
 
-    const layerSources: LayerSource[] = [
-      {
-        image: "",
-        palette: ["#efe7d7", "#8d7d67", "#211b16"],
-        name: "Invitation",
-        kind: "intro",
-      },
-      ...imageUrls.slice(0, 5).map((image, index) => ({
-        image,
-        palette: palettes[index] ?? palettes[0],
-        name: `Layer ${index + 1}`,
-        kind: "image" as const,
-      })),
-    ];
+    const layerSources: LayerSource[] = imageUrls.slice(0, 5).map((image, index) => ({
+      image,
+      palette: palettes[index] ?? palettes[0],
+      name: `Layer ${index + 1}`,
+      kind: "image" as const,
+    }));
 
     const renderer = new THREE.WebGLRenderer({
       canvas: stageCanvas,
@@ -425,7 +417,8 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
     }
 
     function beginPointer(event: PointerEvent) {
-      if (disabled || state.peelTransition || state.activeLayer >= state.layers.length - 1) return;
+      if (disabled || state.peelTransition) return;
+      if (introDismissedRef.current && state.activeLayer >= state.layers.length - 1) return;
 
       ensureAudio();
       const point = pointerFromEvent(event);
@@ -504,11 +497,15 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
 
     function carveBetweenHeads() {
       const layer = state.layers[state.activeLayer];
-      if (!layer || !state.tearing) return;
+      if ((!layer && introDismissedRef.current) || !state.tearing) return;
 
       if (!state.lastHead) {
         state.lastHead = state.head.clone();
-        cutOrganicHole(layer, state.head, state.brush * 0.5);
+        if (introDismissedRef.current && layer) {
+          cutOrganicHole(layer, state.head, state.brush * 0.5);
+        } else {
+          cutIntroOverlayHole(state.head, state.brush * 0.5);
+        }
         return;
       }
 
@@ -518,11 +515,15 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
       for (let i = 1; i <= steps; i += 1) {
         const point = state.lastHead.clone().lerp(state.head, i / steps);
         const radius = state.brush * (0.82 + Math.sin(point.x * 0.012 + point.y * 0.008) * 0.08);
-        cutOrganicHole(layer, point, radius);
+        if (introDismissedRef.current && layer) {
+          cutOrganicHole(layer, point, radius);
+        } else {
+          cutIntroOverlayHole(point, radius);
+        }
         addSeamPoint(point, radius);
       }
       state.lastHead.copy(state.head);
-      layer.maskTexture.needsUpdate = true;
+      if (introDismissedRef.current && layer) layer.maskTexture.needsUpdate = true;
     }
 
     function cutOrganicHole(layer: StoryLayer, point: THREE.Vector2, radius: number) {
@@ -563,9 +564,6 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
       ctx.fill();
       ctx.restore();
 
-      if (layer.kind === "intro") {
-        cutIntroOverlayHole(point, radius);
-      }
     }
 
     function addSeamPoint(point: THREE.Vector2, radius: number) {
@@ -680,6 +678,15 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
     }
 
     function maybeDropLayer() {
+      if (!introDismissedRef.current) {
+        if (traveledSeamLength() > Math.max(state.width, state.height) * 0.85) {
+          dropIntroCover();
+        }
+
+        resetGesture();
+        return;
+      }
+
       const layer = state.layers[state.activeLayer];
       if (!layer || state.activeLayer >= state.layers.length - 1) {
         resetGesture();
@@ -817,10 +824,9 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
 
     function resetArtwork() {
       completedRef.current = false;
-      const resetLayer = introDismissedRef.current ? 1 : 0;
       setIntroVisible(!introDismissedRef.current);
       state.peelTransition = null;
-      state.activeLayer = resetLayer;
+      state.activeLayer = 0;
       state.layers.forEach(resetMask);
       if (!introDismissedRef.current) resetIntroOverlayMask();
       resetGesture();
@@ -830,9 +836,17 @@ export function TearableStory({ imageUrls, title, disabled = false, onCompleteRe
 
     function updateStatus() {
       statusElement.textContent =
-        state.activeLayer === 0
+        !introDismissedRef.current
           ? "Invitation"
-          : `Layer ${Math.min(state.activeLayer, imageUrls.length)} of ${imageUrls.length}`;
+          : `Layer ${Math.min(state.activeLayer + 1, imageUrls.length)} of ${imageUrls.length}`;
+    }
+
+    function dropIntroCover() {
+      introDismissedRef.current = true;
+      cutIntroOverlayPeel(Math.hypot(state.width, state.height));
+      setIntroVisible(false);
+      playDropSound();
+      updateStatus();
     }
 
     function resetIntroOverlayMask() {
