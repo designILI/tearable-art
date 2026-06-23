@@ -2,7 +2,13 @@
 
 import { useEffect, useRef } from "react";
 
-const demoImages = ["/assets/layers/layer-01.jpeg", "/assets/layers/layer-05.jpeg", "/assets/layers/layer-04.jpeg"];
+const demoImages = [
+  "/assets/layers/layer-01.jpeg",
+  "/assets/layers/layer-05.jpeg",
+  "/assets/layers/layer-04.jpeg",
+  "/assets/layers/layer-02.jpeg",
+  "/assets/layers/layer-03.jpeg",
+];
 
 type LoadedImage = {
   element: HTMLImageElement;
@@ -63,7 +69,9 @@ export function HomeRevealPreview() {
       target.globalAlpha = 1;
     }
 
-    function drawPaperTexture(target: CanvasRenderingContext2D) {
+    function drawPaperTexture(target: CanvasRenderingContext2D, alpha = 1) {
+      target.save();
+      target.globalAlpha = alpha;
       const gradient = target.createLinearGradient(0, 0, width, height);
       gradient.addColorStop(0, "rgba(246, 239, 227, 0.28)");
       gradient.addColorStop(1, "rgba(37, 31, 25, 0.18)");
@@ -81,14 +89,15 @@ export function HomeRevealPreview() {
         }
         target.stroke();
       }
-      target.globalAlpha = 1;
+      target.restore();
     }
 
-    function scratchPath(target: CanvasRenderingContext2D, progress: number) {
+    function scratchPath(target: CanvasRenderingContext2D, progress: number, layerIndex: number) {
       const points = 64;
       const startX = width * 0.1;
       const endX = width * 0.92;
-      const paths = [-0.17, 0, 0.17];
+      const paths = [-0.2, -0.06, 0.1, 0.24];
+      const layerOffset = layerIndex * 0.54;
 
       target.save();
       target.globalCompositeOperation = "destination-out";
@@ -105,8 +114,8 @@ export function HomeRevealPreview() {
           const x = startX + (endX - startX) * t;
           const y =
             height * (0.32 + 0.3 * t + offset) +
-            Math.sin(t * Math.PI * 5.5 + pathIndex * 0.82) * height * 0.07;
-          const radius = width * (0.052 + Math.sin(t * Math.PI * 2 + pathIndex) * 0.012);
+            Math.sin(t * Math.PI * 5.5 + pathIndex * 0.82 + layerOffset) * height * 0.07;
+          const radius = width * (0.052 + Math.sin(t * Math.PI * 2 + pathIndex + layerOffset) * 0.012);
           target.beginPath();
           target.ellipse(x, y, radius * 2.1, radius * 1.08, -0.34 + pathIndex * 0.18, 0, Math.PI * 2);
           target.fill();
@@ -119,47 +128,46 @@ export function HomeRevealPreview() {
           const x = startX + (endX - startX) * t;
           const y =
             height * (0.32 + 0.3 * t + offset) +
-            Math.sin(t * Math.PI * 5.5 + pathIndex * 0.82) * height * 0.07;
+            Math.sin(t * Math.PI * 5.5 + pathIndex * 0.82 + layerOffset) * height * 0.07;
           if (index === 0) target.moveTo(x, y);
           else target.lineTo(x, y);
         }
         target.stroke();
       });
       target.restore();
-
-      const cursorT = Math.min(1, Math.max(0, progress));
-      const cursorX = startX + (endX - startX) * cursorT;
-      const cursorY = height * (0.32 + 0.3 * cursorT) + Math.sin(cursorT * Math.PI * 5.5) * height * 0.08;
-      drawingContext.save();
-      drawingContext.shadowColor = "rgba(37, 31, 25, 0.28)";
-      drawingContext.shadowBlur = 18;
-      drawingContext.fillStyle = "rgba(246, 239, 227, 0.92)";
-      drawingContext.beginPath();
-      drawingContext.arc(cursorX, cursorY, Math.max(16, width * 0.04), 0, Math.PI * 2);
-      drawingContext.fill();
-      drawingContext.restore();
     }
 
     function draw() {
       if (disposed) return;
 
-      const elapsed = (performance.now() % 6200) / 6200;
-      const progress = elapsed < 0.68 ? easeInOutCubic(elapsed / 0.68) : 1;
+      const phaseDuration = 4200;
+      const totalDuration = phaseDuration * demoImages.length;
+      const elapsed = performance.now() % totalDuration;
+      const topIndex = Math.floor(elapsed / phaseDuration);
+      const nextIndex = (topIndex + 1) % demoImages.length;
+      const phaseProgress = (elapsed % phaseDuration) / phaseDuration;
+      const scratchProgress = phaseProgress < 0.74 ? easeInOutCubic(phaseProgress / 0.74) : 1;
+      const fadeProgress = easeInOutCubic(Math.min(1, Math.max(0, (phaseProgress - 0.54) / 0.24)));
+      const topAlpha = 1 - fadeProgress;
+      const showCursor = phaseProgress < 0.82;
 
       drawingContext.clearRect(0, 0, width, height);
       drawingContext.fillStyle = "#1b1713";
       drawingContext.fillRect(0, 0, width, height);
 
-      const bottom = images[1];
-      const top = images[0];
+      const bottom = images[nextIndex];
+      const top = images[topIndex];
       if (bottom?.loaded) drawCover(drawingContext, bottom.element);
-      if (images[2]?.loaded) drawCover(drawingContext, images[2].element, 0.04);
 
       topDrawingContext.clearRect(0, 0, width, height);
-      if (top?.loaded) drawCover(topDrawingContext, top.element, 1 - Math.min(0.48, Math.max(0, progress - 0.55) * 1.07));
-      drawPaperTexture(topDrawingContext);
-      scratchPath(topDrawingContext, progress);
+      if (top?.loaded) drawCover(topDrawingContext, top.element, topAlpha);
+      drawPaperTexture(topDrawingContext, topAlpha);
+      scratchPath(topDrawingContext, scratchProgress, topIndex);
       drawingContext.drawImage(topCanvas, 0, 0, width, height);
+
+      if (showCursor) {
+        drawCursor(scratchProgress, topIndex);
+      }
 
       const vignette = drawingContext.createRadialGradient(width / 2, height / 2, width * 0.1, width / 2, height / 2, width * 0.72);
       vignette.addColorStop(0, "rgba(0, 0, 0, 0)");
@@ -172,6 +180,25 @@ export function HomeRevealPreview() {
 
     function easeInOutCubic(value: number) {
       return value < 0.5 ? 4 * value ** 3 : 1 - Math.pow(-2 * value + 2, 3) / 2;
+    }
+
+    function drawCursor(progress: number, layerIndex: number) {
+      const startX = width * 0.1;
+      const endX = width * 0.92;
+      const cursorT = Math.min(1, Math.max(0, progress));
+      const layerOffset = layerIndex * 0.54;
+      const cursorX = startX + (endX - startX) * cursorT;
+      const cursorY =
+        height * (0.32 + 0.3 * cursorT) + Math.sin(cursorT * Math.PI * 5.5 + layerOffset) * height * 0.08;
+
+      drawingContext.save();
+      drawingContext.shadowColor = "rgba(37, 31, 25, 0.28)";
+      drawingContext.shadowBlur = 18;
+      drawingContext.fillStyle = "rgba(246, 239, 227, 0.92)";
+      drawingContext.beginPath();
+      drawingContext.arc(cursorX, cursorY, Math.max(16, width * 0.04), 0, Math.PI * 2);
+      drawingContext.fill();
+      drawingContext.restore();
     }
 
     resize();
