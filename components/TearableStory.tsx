@@ -68,7 +68,6 @@ export function TearableStory({ imageUrls, title, disabled = false, hideReset = 
   const completedRef = useRef(false);
   const introDismissedRef = useRef(false);
   const [introVisible, setIntroVisible] = useState(true);
-  const [introLeaving, setIntroLeaving] = useState(false);
 
   useEffect(() => {
     disabledRef.current = disabled;
@@ -137,6 +136,7 @@ export function TearableStory({ imageUrls, title, disabled = false, hideReset = 
       brush: 0.055,
       seam: [] as SeamPoint[],
       tearPercent: 0,
+      introPeelTransition: null as { startedAt: number; duration: number } | null,
       peelTransition: null as { layer: StoryLayer; startedAt: number; duration: number } | null,
     };
     let storyAudio: StoryAudio | null = null;
@@ -428,7 +428,7 @@ export function TearableStory({ imageUrls, title, disabled = false, hideReset = 
     }
 
     function beginPointer(event: PointerEvent) {
-      if (disabledRef.current || state.peelTransition) return;
+      if (disabledRef.current || state.peelTransition || state.introPeelTransition) return;
       if (introDismissedRef.current && state.activeLayer >= state.layers.length - 1) return;
 
       ensureAudio();
@@ -482,6 +482,7 @@ export function TearableStory({ imageUrls, title, disabled = false, hideReset = 
     let animationId = 0;
     function animate() {
       animationId = requestAnimationFrame(animate);
+      updateIntroPeelTransition();
       updatePeelTransition();
 
       if (state.tearing) {
@@ -841,8 +842,8 @@ export function TearableStory({ imageUrls, title, disabled = false, hideReset = 
 
     function resetArtwork() {
       completedRef.current = false;
-      setIntroLeaving(false);
       setIntroVisible(!introDismissedRef.current);
+      state.introPeelTransition = null;
       state.peelTransition = null;
       state.activeLayer = 0;
       state.layers.forEach(resetMask);
@@ -860,15 +861,28 @@ export function TearableStory({ imageUrls, title, disabled = false, hideReset = 
     }
 
     function dropIntroCover() {
-      introDismissedRef.current = true;
-      cutIntroOverlayPeel(Math.hypot(state.width, state.height));
-      setIntroLeaving(true);
-      window.setTimeout(() => {
-        setIntroVisible(false);
-        setIntroLeaving(false);
-      }, 650);
+      if (state.introPeelTransition) return;
+
+      state.introPeelTransition = { startedAt: performance.now(), duration: 1100 };
       playDropSound();
-      updateStatus();
+    }
+
+    function updateIntroPeelTransition() {
+      const transition = state.introPeelTransition;
+      if (!transition) return;
+
+      const progress = clamp((performance.now() - transition.startedAt) / transition.duration, 0, 1);
+      const eased = easeInOutCubic(progress);
+      const radius = Math.hypot(state.width, state.height) * (0.08 + eased * 0.74);
+
+      cutIntroOverlayPeel(radius);
+
+      if (progress >= 1) {
+        state.introPeelTransition = null;
+        introDismissedRef.current = true;
+        setIntroVisible(false);
+        updateStatus();
+      }
     }
 
     function resetIntroOverlayMask() {
@@ -1102,10 +1116,8 @@ export function TearableStory({ imageUrls, title, disabled = false, hideReset = 
       <canvas ref={canvasRef} className="stage-canvas block h-full w-full" aria-label={title} />
       <canvas
         ref={introOverlayRef}
-        className={`pointer-events-none absolute inset-0 z-20 h-full w-full shadow-[inset_0_0_120px_rgba(33,27,22,0.24)] transition-opacity duration-700 ${
+        className={`pointer-events-none absolute inset-0 z-20 h-full w-full shadow-[inset_0_0_120px_rgba(33,27,22,0.24)] ${
           introVisible && !disabled ? "block" : "hidden"
-        } ${
-          introLeaving ? "opacity-0" : "opacity-100"
         }`}
         aria-label="Someone has shared a Moment with you. To experience it, place your finger on the screen and move it along the surface. You have 3 cycles of this Moment before it fades. Visit Momentoria to make and share your own Moment."
       />

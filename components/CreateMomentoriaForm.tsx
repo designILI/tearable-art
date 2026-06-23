@@ -170,20 +170,6 @@ export function CreateMomentoriaForm() {
           />
         </label>
 
-        <div
-          className={`rounded-[6px] border px-4 py-3 text-sm font-semibold ${
-            blobStatus === "connected"
-              ? "border-sage/30 bg-sage/12 text-ink"
-              : blobStatus === "missing"
-                ? "border-rose/25 bg-rose/12 text-ink"
-                : "border-ink/10 bg-white/60 text-ink/60"
-          }`}
-        >
-          {blobStatus === "checking" ? "Checking Blob storage..." : null}
-          {blobStatus === "connected" ? "Blob storage connected" : null}
-          {blobStatus === "missing" ? "Blob storage is not connected" : null}
-        </div>
-
         <label className="grid gap-2">
           <span className="text-sm font-semibold text-ink">Short message</span>
           <textarea
