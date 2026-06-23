@@ -74,20 +74,25 @@ export function CreateMomentoriaForm() {
     setShareUrl("");
     setUploadProgress(0);
     setUploadStatus("");
+    const formData = new FormData(event.currentTarget);
+    const id = makeMomentoriaId();
+
+    function fail(message: string) {
+      setError(message);
+      trackCreateError(id, message);
+    }
 
     if (files.length !== 5) {
-      setError("Choose exactly 5 images.");
+      fail("Choose exactly 5 images.");
       return;
     }
 
     if (blobStatus !== "connected") {
-      setError("Blob storage is not connected yet. Add BLOB_READ_WRITE_TOKEN in Vercel, redeploy, and try again.");
+      fail("Blob storage is not connected yet. Add BLOB_READ_WRITE_TOKEN in Vercel, redeploy, and try again.");
       return;
     }
 
     setSubmitting(true);
-    const formData = new FormData(event.currentTarget);
-    const id = makeMomentoriaId();
 
     try {
       /*
@@ -136,7 +141,7 @@ export function CreateMomentoriaForm() {
       const result = await readJsonResponse(response);
 
       if (!response.ok || !result.url) {
-        setError(result.error || "Could not create this Momentoria.");
+        fail(result.error || "Could not create this Momentoria.");
         return;
       }
 
@@ -150,7 +155,7 @@ export function CreateMomentoriaForm() {
           : uploadError instanceof Error
             ? uploadError.message
             : "Could not upload these images.";
-      setError(message);
+      fail(message);
     } finally {
       setSubmitting(false);
       setUploadStatus("");
@@ -198,9 +203,10 @@ export function CreateMomentoriaForm() {
           <input
             name="makerEmail"
             type="email"
+            required
             maxLength={120}
             className="min-h-12 rounded-[6px] border border-ink/14 bg-white px-4 outline-none transition focus:border-ink/60"
-            placeholder="Optional"
+            placeholder="you@example.com"
           />
         </label>
 
@@ -383,6 +389,19 @@ async function readJsonResponse(response: Response) {
       error: response.ok ? "The server returned an unreadable response." : `The server returned ${response.status}: ${text.slice(0, 160)}`,
     };
   }
+}
+
+function trackCreateError(id: string, details: string) {
+  fetch("/api/momentoria/events", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ id, event: "create_error", details }),
+    keepalive: true,
+  }).catch(() => {
+    // Error tracking should not create another user-facing error.
+  });
 }
 
 async function fileToBase64(file: File) {

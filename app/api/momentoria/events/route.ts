@@ -3,16 +3,24 @@ import { logMomentoriaEventToSheet } from "@/lib/googleSheets";
 
 export const runtime = "nodejs";
 
-const trackedEvents = new Set(["clicked_cycle_again", "clicked_make_own", "clicked_save_permanently"]);
+const trackedEvents = new Set([
+  "completed_reveal",
+  "clicked_cycle_again",
+  "clicked_make_own",
+  "clicked_save_permanently",
+  "create_error",
+]);
 
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as {
       id?: string;
       event?: string;
+      details?: string;
     };
     const id = String(body.id ?? "");
     const event = String(body.event ?? "");
+    const details = String(body.details ?? "").replace(/\s+/g, " ").trim().slice(0, 240);
 
     if (!/^[a-f0-9]{18}$/i.test(id)) {
       return NextResponse.json({ error: "Invalid Momentoria id." }, { status: 400 });
@@ -27,6 +35,7 @@ export async function POST(request: Request) {
       event,
       eventAt: new Date().toISOString(),
       shareUrl: new URL(`/m/${id}`, request.url).toString(),
+      details,
     });
 
     return NextResponse.json({ ok: true });

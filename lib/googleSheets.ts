@@ -15,6 +15,7 @@ type MomentoriaEventLog = {
   event: string;
   eventAt: string;
   shareUrl: string;
+  details?: string;
 };
 
 const tokenUrl = "https://oauth2.googleapis.com/token";
@@ -30,11 +31,12 @@ export async function logCreatedMomentoriaToSheet(entry: CreatedMomentoriaLog) {
     entry.makerEmail || "",
     entry.imageCount,
     "created",
+    "",
   ]);
 }
 
 export async function logMomentoriaEventToSheet(entry: MomentoriaEventLog) {
-  await appendMomentoriaSheetRow([entry.eventAt, entry.id, entry.shareUrl, "", "", "", "", entry.event]);
+  await appendMomentoriaSheetRow([entry.eventAt, entry.id, entry.shareUrl, "", "", "", "", entry.event, entry.details || ""]);
 }
 
 async function appendMomentoriaSheetRow(values: Array<string | number>) {
@@ -53,7 +55,7 @@ async function appendMomentoriaSheetRow(values: Array<string | number>) {
     upload/share flow still works without analytics.
   */
   const accessToken = await getGoogleAccessToken(clientEmail, privateKey);
-  const range = encodeURIComponent(`${sheetName}!A:H`);
+  const range = encodeURIComponent(`${sheetName}!A:I`);
   const response = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
     {

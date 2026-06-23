@@ -27,6 +27,9 @@ export function ShareMomentoria({ momentoria }: ShareMomentoriaProps) {
   const handleCompleteReveal = useCallback(() => {
     setCompleteReveals((current) => {
       const next = Math.min(current + 1, 3);
+      if (next > current) {
+        trackMomentoriaEvent(momentoria.id, "completed_reveal", `cycle ${next} of 3`);
+      }
       window.localStorage.setItem(storageKey, String(next));
       if (next >= 3) {
         if (endCardTimerRef.current) window.clearTimeout(endCardTimerRef.current);
@@ -34,7 +37,7 @@ export function ShareMomentoria({ momentoria }: ShareMomentoriaProps) {
       }
       return next;
     });
-  }, [storageKey]);
+  }, [momentoria.id, storageKey]);
 
   const handleReset = useCallback(() => {
     setShowEndCard(false);
@@ -156,13 +159,17 @@ export function ShareMomentoria({ momentoria }: ShareMomentoriaProps) {
   );
 }
 
-function trackMomentoriaEvent(id: string, event: "clicked_cycle_again" | "clicked_make_own" | "clicked_save_permanently") {
+function trackMomentoriaEvent(
+  id: string,
+  event: "completed_reveal" | "clicked_cycle_again" | "clicked_make_own" | "clicked_save_permanently",
+  details = "",
+) {
   fetch("/api/momentoria/events", {
     method: "POST",
     headers: {
       "content-type": "application/json",
     },
-    body: JSON.stringify({ id, event }),
+    body: JSON.stringify({ id, event, details }),
     keepalive: true,
   }).catch(() => {
     // Tracking should never interrupt the Momentoria experience.

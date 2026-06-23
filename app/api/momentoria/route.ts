@@ -55,7 +55,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid Momentoria id." }, { status: 400 });
     }
 
-    if (makerEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(makerEmail)) {
+    if (!makerEmail) {
+      return NextResponse.json({ error: "Add your email address." }, { status: 400 });
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(makerEmail)) {
       return NextResponse.json({ error: "Add a valid maker email address." }, { status: 400 });
     }
 

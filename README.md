@@ -46,7 +46,7 @@ Momentoria can append each generated private link to a Google Sheet. This is opt
 3. Add these header cells in row 1:
 
 ```text
-Created At | Momentoria ID | Private Link | Title | Recipient Name | Maker Email | Image Count | Event
+Created At | Momentoria ID | Private Link | Title | Recipient Name | Maker Email | Image Count | Event | Details
 ```
 
 4. Create a Google Cloud service account with access to the Google Sheets API.
