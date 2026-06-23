@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 
-const demoImages = ["/assets/layers/layer-01.jpeg", "/assets/layers/layer-02.jpeg", "/assets/layers/layer-03.jpeg"];
+const demoImages = ["/assets/layers/layer-01.jpeg", "/assets/layers/layer-05.jpeg", "/assets/layers/layer-04.jpeg"];
 
 type LoadedImage = {
   element: HTMLImageElement;
@@ -85,10 +85,10 @@ export function HomeRevealPreview() {
     }
 
     function scratchPath(target: CanvasRenderingContext2D, progress: number) {
-      const points = 48;
-      const visiblePoints = Math.floor(points * progress);
-      const startX = width * 0.16;
-      const endX = width * 0.88;
+      const points = 64;
+      const startX = width * 0.1;
+      const endX = width * 0.92;
+      const paths = [-0.17, 0, 0.17];
 
       target.save();
       target.globalCompositeOperation = "destination-out";
@@ -96,26 +96,35 @@ export function HomeRevealPreview() {
       target.lineJoin = "round";
       target.strokeStyle = "#000";
 
-      for (let index = 0; index < visiblePoints; index += 1) {
-        const t = index / Math.max(1, points - 1);
-        const x = startX + (endX - startX) * t;
-        const y = height * (0.32 + 0.3 * t) + Math.sin(t * Math.PI * 5.5) * height * 0.08;
-        const radius = width * (0.035 + Math.sin(t * Math.PI * 2) * 0.01);
-        target.beginPath();
-        target.ellipse(x, y, radius * 1.8, radius, -0.34, 0, Math.PI * 2);
-        target.fill();
-      }
+      paths.forEach((offset, pathIndex) => {
+        const pathProgress = Math.min(1, Math.max(0, progress * 1.18 - pathIndex * 0.16));
+        const pathPoints = Math.floor(points * pathProgress);
 
-      target.lineWidth = width * 0.08;
-      target.beginPath();
-      for (let index = 0; index < visiblePoints; index += 1) {
-        const t = index / Math.max(1, points - 1);
-        const x = startX + (endX - startX) * t;
-        const y = height * (0.32 + 0.3 * t) + Math.sin(t * Math.PI * 5.5) * height * 0.08;
-        if (index === 0) target.moveTo(x, y);
-        else target.lineTo(x, y);
-      }
-      target.stroke();
+        for (let index = 0; index < pathPoints; index += 1) {
+          const t = index / Math.max(1, points - 1);
+          const x = startX + (endX - startX) * t;
+          const y =
+            height * (0.32 + 0.3 * t + offset) +
+            Math.sin(t * Math.PI * 5.5 + pathIndex * 0.82) * height * 0.07;
+          const radius = width * (0.052 + Math.sin(t * Math.PI * 2 + pathIndex) * 0.012);
+          target.beginPath();
+          target.ellipse(x, y, radius * 2.1, radius * 1.08, -0.34 + pathIndex * 0.18, 0, Math.PI * 2);
+          target.fill();
+        }
+
+        target.lineWidth = width * 0.115;
+        target.beginPath();
+        for (let index = 0; index < pathPoints; index += 1) {
+          const t = index / Math.max(1, points - 1);
+          const x = startX + (endX - startX) * t;
+          const y =
+            height * (0.32 + 0.3 * t + offset) +
+            Math.sin(t * Math.PI * 5.5 + pathIndex * 0.82) * height * 0.07;
+          if (index === 0) target.moveTo(x, y);
+          else target.lineTo(x, y);
+        }
+        target.stroke();
+      });
       target.restore();
 
       const cursorT = Math.min(1, Math.max(0, progress));
@@ -135,7 +144,7 @@ export function HomeRevealPreview() {
       if (disposed) return;
 
       const elapsed = (performance.now() % 6200) / 6200;
-      const progress = elapsed < 0.78 ? easeInOutCubic(elapsed / 0.78) : 1;
+      const progress = elapsed < 0.68 ? easeInOutCubic(elapsed / 0.68) : 1;
 
       drawingContext.clearRect(0, 0, width, height);
       drawingContext.fillStyle = "#1b1713";
@@ -144,10 +153,10 @@ export function HomeRevealPreview() {
       const bottom = images[1];
       const top = images[0];
       if (bottom?.loaded) drawCover(drawingContext, bottom.element);
-      if (images[2]?.loaded) drawCover(drawingContext, images[2].element, 0.12);
+      if (images[2]?.loaded) drawCover(drawingContext, images[2].element, 0.04);
 
       topDrawingContext.clearRect(0, 0, width, height);
-      if (top?.loaded) drawCover(topDrawingContext, top.element);
+      if (top?.loaded) drawCover(topDrawingContext, top.element, 1 - Math.min(0.48, Math.max(0, progress - 0.55) * 1.07));
       drawPaperTexture(topDrawingContext);
       scratchPath(topDrawingContext, progress);
       drawingContext.drawImage(topCanvas, 0, 0, width, height);
