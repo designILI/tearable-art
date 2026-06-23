@@ -41,11 +41,11 @@ export async function getMomentoriaMetadata(id: string) {
       message: "A local preview Momentoria using the original layered artwork.",
       recipientName: "You",
       imageUrls: [
-        "/assets/layers/layer-01.jpg",
-        "/assets/layers/layer-02.jpg",
-        "/assets/layers/layer-03.jpg",
-        "/assets/layers/layer-04.jpg",
-        "/assets/layers/layer-05.jpg",
+        "/assets/layers/layer-01.jpeg",
+        "/assets/layers/layer-02.jpeg",
+        "/assets/layers/layer-03.jpeg",
+        "/assets/layers/layer-04.jpeg",
+        "/assets/layers/layer-05.jpeg",
       ],
       createdAt: new Date().toISOString(),
     };

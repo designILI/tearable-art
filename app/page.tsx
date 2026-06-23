@@ -2,9 +2,9 @@ import Image from "next/image";
 import Link from "next/link";
 
 const previewImages = [
-  "/assets/layers/layer-01.jpg",
-  "/assets/layers/layer-02.jpg",
-  "/assets/layers/layer-03.jpg",
+  "/assets/layers/layer-01.jpeg",
+  "/assets/layers/layer-02.jpeg",
+  "/assets/layers/layer-03.jpeg",
 ];
 
 export default function HomePage() {
