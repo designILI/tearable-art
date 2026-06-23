@@ -536,12 +536,6 @@ export function TearableStory({ imageUrls, title, disabled = false, hideReset = 
       }
       state.lastHead.copy(state.head);
       if (introDismissedRef.current && layer) layer.maskTexture.needsUpdate = true;
-
-      if (!introDismissedRef.current && traveledSeamLength() > Math.max(state.width, state.height) * 0.55) {
-        dropIntroCover();
-        state.seam = [];
-        state.lastHead = state.head.clone();
-      }
     }
 
     function cutOrganicHole(layer: StoryLayer, point: THREE.Vector2, radius: number) {
@@ -697,7 +691,7 @@ export function TearableStory({ imageUrls, title, disabled = false, hideReset = 
 
     function maybeDropLayer() {
       if (!introDismissedRef.current) {
-        if (traveledSeamLength() > Math.max(state.width, state.height) * 0.55) {
+        if (estimateIntroRevealed() > 0.25 || traveledSeamLength() > Math.max(state.width, state.height) * 0.85) {
           dropIntroCover();
         }
 
@@ -803,6 +797,21 @@ export function TearableStory({ imageUrls, title, disabled = false, hideReset = 
     function estimateRevealed(layer: StoryLayer) {
       const data = layer.maskCtx.getImageData(0, 0, layer.mask.width, layer.mask.height).data;
       const stride = Math.max(1, Math.floor((layer.mask.width * layer.mask.height) / 9000));
+      let clear = 0;
+      let total = 0;
+      for (let i = 3; i < data.length; i += 4 * stride) {
+        total += 1;
+        if (data[i] < 20) clear += 1;
+      }
+      return total ? clear / total : 0;
+    }
+
+    function estimateIntroRevealed() {
+      const overlayCanvas = introOverlayCanvas;
+      if (!introOverlayCtx || !overlayCanvas || !overlayCanvas.width || !overlayCanvas.height) return 0;
+
+      const data = introOverlayCtx.getImageData(0, 0, overlayCanvas.width, overlayCanvas.height).data;
+      const stride = Math.max(1, Math.floor((overlayCanvas.width * overlayCanvas.height) / 9000));
       let clear = 0;
       let total = 0;
       for (let i = 3; i < data.length; i += 4 * stride) {
