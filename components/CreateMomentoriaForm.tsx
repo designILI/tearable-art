@@ -128,6 +128,7 @@ export function CreateMomentoriaForm() {
           title: formData.get("title"),
           message: formData.get("message"),
           recipientName: formData.get("recipientName"),
+          makerEmail: formData.get("makerEmail"),
           imageUploads,
         }),
         signal: abortController.signal,
@@ -187,6 +188,17 @@ export function CreateMomentoriaForm() {
           <input
             name="recipientName"
             maxLength={60}
+            className="min-h-12 rounded-[6px] border border-ink/14 bg-white px-4 outline-none transition focus:border-ink/60"
+            placeholder="Optional"
+          />
+        </label>
+
+        <label className="grid gap-2">
+          <span className="text-sm font-semibold text-ink">Your email</span>
+          <input
+            name="makerEmail"
+            type="email"
+            maxLength={120}
             className="min-h-12 rounded-[6px] border border-ink/14 bg-white px-4 outline-none transition focus:border-ink/60"
             placeholder="Optional"
           />

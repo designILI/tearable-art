@@ -57,6 +57,8 @@ const palettes: [string, string, string][] = [
   ["#c9ac8f", "#8a5743", "#160f0c"],
 ];
 
+const ambientTrackSources = ["/assets/audio/momentoria-ambient.mp3"];
+
 export function TearableStory({ imageUrls, title, disabled = false, hideReset = false, onCompleteReveal, onReset }: TearableStoryProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const introOverlayRef = useRef<HTMLCanvasElement | null>(null);
@@ -75,6 +77,9 @@ export function TearableStory({ imageUrls, title, disabled = false, hideReset = 
   const [introVisible, setIntroVisible] = useState(true);
   const [musicEnabled, setMusicEnabled] = useState(true);
   const [musicStarted, setMusicStarted] = useState(false);
+  const [ambientTrackSource] = useState(
+    () => ambientTrackSources[Math.floor(Math.random() * ambientTrackSources.length)] ?? ambientTrackSources[0],
+  );
 
   useEffect(() => {
     disabledRef.current = disabled;
@@ -1213,7 +1218,7 @@ export function TearableStory({ imageUrls, title, disabled = false, hideReset = 
 
   return (
     <div className="relative h-full w-full overflow-hidden">
-      <audio ref={ambientAudioRef} src="/assets/audio/momentoria-ambient.mp3" preload="auto" loop />
+      <audio ref={ambientAudioRef} src={ambientTrackSource} preload="auto" loop />
       <canvas ref={canvasRef} className="stage-canvas block h-full w-full" aria-label={title} />
       <canvas
         ref={introOverlayRef}

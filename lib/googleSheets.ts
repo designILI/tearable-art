@@ -4,15 +4,40 @@ type CreatedMomentoriaLog = {
   id: string;
   title: string;
   recipientName?: string;
+  makerEmail?: string;
   createdAt: string;
   shareUrl: string;
   imageCount: number;
+};
+
+type MomentoriaEventLog = {
+  id: string;
+  event: string;
+  eventAt: string;
+  shareUrl: string;
 };
 
 const tokenUrl = "https://oauth2.googleapis.com/token";
 const sheetsScope = "https://www.googleapis.com/auth/spreadsheets";
 
 export async function logCreatedMomentoriaToSheet(entry: CreatedMomentoriaLog) {
+  await appendMomentoriaSheetRow([
+    entry.createdAt,
+    entry.id,
+    entry.shareUrl,
+    entry.title,
+    entry.recipientName || "",
+    entry.makerEmail || "",
+    entry.imageCount,
+    "created",
+  ]);
+}
+
+export async function logMomentoriaEventToSheet(entry: MomentoriaEventLog) {
+  await appendMomentoriaSheetRow([entry.eventAt, entry.id, entry.shareUrl, "", "", "", "", entry.event]);
+}
+
+async function appendMomentoriaSheetRow(values: Array<string | number>) {
   const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
   const clientEmail = process.env.GOOGLE_SHEETS_CLIENT_EMAIL;
   const privateKey = normalizePrivateKey(process.env.GOOGLE_SHEETS_PRIVATE_KEY);
@@ -28,7 +53,7 @@ export async function logCreatedMomentoriaToSheet(entry: CreatedMomentoriaLog) {
     upload/share flow still works without analytics.
   */
   const accessToken = await getGoogleAccessToken(clientEmail, privateKey);
-  const range = encodeURIComponent(`${sheetName}!A:G`);
+  const range = encodeURIComponent(`${sheetName}!A:H`);
   const response = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
     {
@@ -38,17 +63,7 @@ export async function logCreatedMomentoriaToSheet(entry: CreatedMomentoriaLog) {
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        values: [
-          [
-            entry.createdAt,
-            entry.id,
-            entry.shareUrl,
-            entry.title,
-            entry.recipientName || "",
-            entry.imageCount,
-            "created",
-          ],
-        ],
+        values: [values],
       }),
       signal: AbortSignal.timeout(5000),
     },

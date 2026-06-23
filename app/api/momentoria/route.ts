@@ -30,6 +30,7 @@ export async function POST(request: Request) {
       title?: string;
       message?: string;
       recipientName?: string;
+      makerEmail?: string;
       imageUrls?: string[];
       imageUploads?: Array<{
         data: string;
@@ -42,6 +43,7 @@ export async function POST(request: Request) {
     const title = cleanText(body.title ?? "", 80);
     const message = cleanText(body.message ?? "", 220);
     const recipientName = cleanText(body.recipientName ?? "", 60);
+    const makerEmail = cleanText(body.makerEmail ?? "", 120).toLowerCase();
     const imageUrls = Array.isArray(body.imageUrls) ? body.imageUrls.filter((url) => typeof url === "string") : [];
     const imageUploads = Array.isArray(body.imageUploads) ? body.imageUploads : [];
 
@@ -51,6 +53,10 @@ export async function POST(request: Request) {
 
     if (!/^[a-f0-9]{18}$/i.test(id)) {
       return NextResponse.json({ error: "Invalid Momentoria id." }, { status: 400 });
+    }
+
+    if (makerEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(makerEmail)) {
+      return NextResponse.json({ error: "Add a valid maker email address." }, { status: 400 });
     }
 
     const savedImageUrls =
@@ -74,6 +80,7 @@ export async function POST(request: Request) {
       title,
       message,
       recipientName: recipientName || undefined,
+      makerEmail: makerEmail || undefined,
       imageUrls: savedImageUrls,
       createdAt: new Date().toISOString(),
     };
@@ -86,6 +93,7 @@ export async function POST(request: Request) {
         id,
         title,
         recipientName: recipientName || undefined,
+        makerEmail: makerEmail || undefined,
         createdAt: metadata.createdAt,
         shareUrl,
         imageCount: savedImageUrls.length,

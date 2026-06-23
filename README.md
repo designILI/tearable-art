@@ -46,7 +46,7 @@ Momentoria can append each generated private link to a Google Sheet. This is opt
 3. Add these header cells in row 1:
 
 ```text
-Created At | Momentoria ID | Private Link | Title | Recipient Name | Image Count | Event
+Created At | Momentoria ID | Private Link | Title | Recipient Name | Maker Email | Image Count | Event
 ```
 
 4. Create a Google Cloud service account with access to the Google Sheets API.
@@ -81,6 +81,20 @@ Creating a real Momentoria locally requires `BLOB_READ_WRITE_TOKEN` from a publi
 A successful submit is the final proof: it creates five files and `metadata.json` in Vercel Blob, displays the private link, and, when Google Sheets variables are configured, appends the created link to the spreadsheet.
 
 This MVP uses public Blob file URLs behind an unguessable Momentoria share link. In Vercel Storage, choose or create a public Blob store. A private Blob store will reject uploads with `Cannot use public access on a private store`.
+
+## Homepage Images And Music
+
+The homepage preview uses the bundled layer images in `public/assets/layers`. To change the homepage photos without code edits, replace these files and keep the same names:
+
+```text
+layer-01.jpeg
+layer-02.jpeg
+layer-03.jpeg
+layer-04.jpeg
+layer-05.jpeg
+```
+
+Momentoria currently includes one ambient track in `public/assets/audio`. The reveal player is ready for multiple tracks; add more MP3 files there and include their paths in `ambientTrackSources` in `components/TearableStory.tsx`. The app will choose one automatically for each share view.
 
 ## Checks
 

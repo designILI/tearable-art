@@ -46,6 +46,7 @@ export function ShareMomentoria({ momentoria }: ShareMomentoriaProps) {
   }, []);
 
   const handleResetCycles = useCallback(() => {
+    trackMomentoriaEvent(momentoria.id, "clicked_cycle_again");
     window.localStorage.setItem(storageKey, "0");
     setCompleteReveals(0);
     setShowEndCard(false);
@@ -55,11 +56,16 @@ export function ShareMomentoria({ momentoria }: ShareMomentoriaProps) {
       window.clearTimeout(endCardTimerRef.current);
       endCardTimerRef.current = null;
     }
-  }, [storageKey]);
+  }, [momentoria.id, storageKey]);
 
   const handleSavePermanently = useCallback(() => {
+    trackMomentoriaEvent(momentoria.id, "clicked_save_permanently");
     setShowComingSoon(true);
-  }, []);
+  }, [momentoria.id]);
+
+  const handleMakeOwn = useCallback(() => {
+    trackMomentoriaEvent(momentoria.id, "clicked_make_own");
+  }, [momentoria.id]);
 
   useEffect(() => {
     return () => {
@@ -119,6 +125,7 @@ export function ShareMomentoria({ momentoria }: ShareMomentoriaProps) {
                 <p className="mt-8 text-sm uppercase tracking-[0.18em] text-cream/54">Make your own</p>
                 <a
                   href={momentoriaLink}
+                  onClick={handleMakeOwn}
                   className="mt-3 inline-flex min-h-12 items-center justify-center rounded-full border border-cream/32 px-6 text-sm font-semibold text-cream transition hover:border-cream/70 hover:bg-cream/10"
                 >
                   Visit Momentoria
@@ -147,4 +154,17 @@ export function ShareMomentoria({ momentoria }: ShareMomentoriaProps) {
       ) : null}
     </main>
   );
+}
+
+function trackMomentoriaEvent(id: string, event: "clicked_cycle_again" | "clicked_make_own" | "clicked_save_permanently") {
+  fetch("/api/momentoria/events", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ id, event }),
+    keepalive: true,
+  }).catch(() => {
+    // Tracking should never interrupt the Momentoria experience.
+  });
 }

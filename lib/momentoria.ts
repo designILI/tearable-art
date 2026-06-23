@@ -5,6 +5,7 @@ export type MomentoriaMetadata = {
   title: string;
   message: string;
   recipientName?: string;
+  makerEmail?: string;
   imageUrls: string[];
   createdAt: string;
 };
