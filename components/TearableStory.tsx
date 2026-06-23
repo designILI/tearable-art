@@ -67,13 +67,103 @@ export function TearableStory({ imageUrls, title, disabled = false, hideReset = 
   const onResetRef = useRef(onReset);
   const completedRef = useRef(false);
   const introDismissedRef = useRef(false);
+  const ambientAudioRef = useRef<HTMLAudioElement | null>(null);
+  const ambientFadeRef = useRef<number | null>(null);
+  const musicEnabledRef = useRef(true);
+  const startAmbientMusicRef = useRef<() => void>(() => {});
+  const stopAmbientMusicRef = useRef<() => void>(() => {});
   const [introVisible, setIntroVisible] = useState(true);
+  const [musicEnabled, setMusicEnabled] = useState(true);
+  const [musicStarted, setMusicStarted] = useState(false);
 
   useEffect(() => {
     disabledRef.current = disabled;
     onCompleteRevealRef.current = onCompleteReveal;
     onResetRef.current = onReset;
   }, [disabled, onCompleteReveal, onReset]);
+
+  useEffect(() => {
+    musicEnabledRef.current = musicEnabled;
+  }, [musicEnabled]);
+
+  useEffect(() => {
+    if (disabled) {
+      stopAmbientMusicRef.current();
+    }
+  }, [disabled]);
+
+  useEffect(() => {
+    const audio = ambientAudioRef.current;
+    return () => {
+      if (ambientFadeRef.current) cancelAnimationFrame(ambientFadeRef.current);
+      audio?.pause();
+    };
+  }, []);
+
+  function fadeAmbientAudio(targetVolume: number, durationMs = 900, pauseWhenSilent = false) {
+    const audio = ambientAudioRef.current;
+    if (!audio) return;
+    if (ambientFadeRef.current) cancelAnimationFrame(ambientFadeRef.current);
+
+    const startVolume = audio.volume;
+    const startedAt = performance.now();
+
+    function step(now: number) {
+      const progress = Math.min(1, (now - startedAt) / durationMs);
+      const eased = progress < 0.5 ? 4 * progress ** 3 : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+      if (audio) audio.volume = startVolume + (targetVolume - startVolume) * eased;
+
+      if (progress < 1) {
+        ambientFadeRef.current = requestAnimationFrame(step);
+      } else {
+        ambientFadeRef.current = null;
+        if (pauseWhenSilent && audio) audio.pause();
+      }
+    }
+
+    ambientFadeRef.current = requestAnimationFrame(step);
+  }
+
+  async function startAmbientMusic() {
+    const audio = ambientAudioRef.current;
+    if (!audio || !musicEnabledRef.current || disabledRef.current) return;
+
+    audio.loop = true;
+    if (audio.paused) audio.volume = 0;
+
+    try {
+      await audio.play();
+      setMusicStarted(true);
+      fadeAmbientAudio(0.16, 1400);
+    } catch {
+      setMusicStarted(false);
+    }
+  }
+
+  function stopAmbientMusic() {
+    const audio = ambientAudioRef.current;
+    if (!audio || audio.paused) return;
+    fadeAmbientAudio(0, 800, true);
+    setMusicStarted(false);
+  }
+
+  function toggleAmbientMusic() {
+    if (musicEnabledRef.current) {
+      musicEnabledRef.current = false;
+      setMusicEnabled(false);
+      stopAmbientMusic();
+      return;
+    }
+
+    musicEnabledRef.current = true;
+    setMusicEnabled(true);
+    void startAmbientMusic();
+  }
+
+  startAmbientMusicRef.current = () => {
+    void startAmbientMusic();
+  };
+  stopAmbientMusicRef.current = stopAmbientMusic;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -432,6 +522,7 @@ export function TearableStory({ imageUrls, title, disabled = false, hideReset = 
       if (introDismissedRef.current && state.activeLayer >= state.layers.length - 1) return;
 
       ensureAudio();
+      startAmbientMusicRef.current();
       const point = pointerFromEvent(event);
       state.pointers.set(event.pointerId, point);
       state.pointer.copy(averagePointers());
@@ -1122,6 +1213,7 @@ export function TearableStory({ imageUrls, title, disabled = false, hideReset = 
 
   return (
     <div className="relative h-full w-full overflow-hidden">
+      <audio ref={ambientAudioRef} src="/assets/audio/momentoria-ambient.mp3" preload="auto" loop />
       <canvas ref={canvasRef} className="stage-canvas block h-full w-full" aria-label={title} />
       <canvas
         ref={introOverlayRef}
@@ -1136,6 +1228,14 @@ export function TearableStory({ imageUrls, title, disabled = false, hideReset = 
             Invitation
           </p>
         </div>
+        <button
+          type="button"
+          onClick={toggleAmbientMusic}
+          aria-pressed={musicEnabled && musicStarted}
+          className="min-h-11 rounded-full border border-cream/28 bg-dusk/40 px-5 text-xs font-semibold uppercase tracking-[0.12em] text-cream backdrop-blur transition hover:border-cream/60 hover:bg-cream/12"
+        >
+          {musicEnabled && musicStarted ? "Music on" : "Music"}
+        </button>
         <button
           ref={resetRef}
           type="button"
