@@ -8,18 +8,18 @@ export default function HomePage() {
         <div className="max-w-xl">
           <p className="mb-4 text-sm font-semibold uppercase tracking-[0.24em] text-sage">Momentoria</p>
           <h1 className="font-serif text-5xl font-semibold leading-[0.95] text-ink sm:text-7xl">
-            Some memories deserve more than a scroll.
+            Some memories deserve more than a swipe.
           </h1>
           <p className="mt-6 max-w-md text-base leading-7 text-ink/70 sm:text-lg">
-            A memory shared through an unfolding image story. Upload five images, add a note, and receive a private link
-            to a layered reveal made for one quiet moment.
+            Upload five images that tell your story, add a note, and receive a private link to a bespoke layered reveal
+            experience. This is your Momenta.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link
               href="/create"
               className="inline-flex min-h-12 items-center rounded-full bg-ink px-6 text-sm font-semibold text-cream shadow-soft transition hover:-translate-y-0.5 hover:bg-dusk"
             >
-              Create a Moment
+              Create a Momenta
             </Link>
           </div>
         </div>

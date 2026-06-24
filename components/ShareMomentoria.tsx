@@ -122,7 +122,7 @@ export function ShareMomentoria({ momentoria }: ShareMomentoriaProps) {
             ) : (
               <>
                 <p className="font-serif text-4xl font-semibold leading-tight text-cream sm:text-6xl">
-                  Hope you enjoyed the Moment!
+                  Hope you enjoyed the Momenta!
                 </p>
                 <p className="mt-6 text-xl font-semibold text-cream/82 sm:text-2xl">Let the sender know!</p>
                 <p className="mt-8 text-sm uppercase tracking-[0.18em] text-cream/54">Make your own</p>
@@ -149,7 +149,7 @@ export function ShareMomentoria({ momentoria }: ShareMomentoriaProps) {
                     Save permanently
                   </button>
                 </div>
-                <p className="mt-6 text-xs uppercase tracking-[0.16em] text-cream/42">This Momentoria has faded.</p>
+                <p className="mt-6 text-xs uppercase tracking-[0.16em] text-cream/42">This Momenta has faded.</p>
               </>
             )}
           </div>

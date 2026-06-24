@@ -9,7 +9,7 @@ export default function CreatePage() {
           <Link href="/" className="text-sm font-semibold text-ink/60 transition hover:text-ink">
             Momentoria
           </Link>
-          <h1 className="mt-8 font-serif text-5xl font-semibold leading-none text-ink sm:text-6xl">Create one memory.</h1>
+          <h1 className="mt-8 font-serif text-5xl font-semibold leading-none text-ink sm:text-6xl">Create a Momenta.</h1>
           <p className="mt-5 max-w-sm leading-7 text-ink/68">
             Choose five images in the order they should unfold. The first image becomes the top layer.
           </p>

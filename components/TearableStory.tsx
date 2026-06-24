@@ -58,6 +58,7 @@ const palettes: [string, string, string][] = [
 ];
 
 const ambientTrackSources = ["/assets/audio/momentoria-ambient.mp3"];
+const revealSoundEffectsEnabled = false;
 
 export function TearableStory({ imageUrls, title, disabled = false, hideReset = false, onCompleteReveal, onReset }: TearableStoryProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -408,7 +409,7 @@ export function TearableStory({ imageUrls, title, disabled = false, hideReset = 
       ctx.textBaseline = "middle";
       ctx.fillStyle = dark;
       ctx.font = `600 ${titleSize}px Georgia, serif`;
-      drawTextBlock(ctx, "Someone has shared a Moment with you", centerX, state.height * 0.28, maxWidth, titleSize * 1.08);
+      drawTextBlock(ctx, "Someone has shared a Momenta with you", centerX, state.height * 0.28, maxWidth, titleSize * 1.08);
 
       ctx.font = `500 ${bodySize}px Arial, sans-serif`;
       ctx.fillStyle = "rgba(33, 27, 22, 0.78)";
@@ -425,7 +426,7 @@ export function TearableStory({ imageUrls, title, disabled = false, hideReset = 
       ctx.fillStyle = mid;
       drawTextBlock(
         ctx,
-        "You have 3 cycles of this Moment before it fades. Visit Momentoria to make and share your own Moment.",
+        "You have 3 cycles of this Momenta before it fades. Visit Momentoria to make and share your own Momenta.",
         centerX,
         state.height * 0.74,
         Math.min(maxWidth, 620),
@@ -526,7 +527,6 @@ export function TearableStory({ imageUrls, title, disabled = false, hideReset = 
       if (disabledRef.current || state.peelTransition || state.introPeelTransition) return;
       if (introDismissedRef.current && state.activeLayer >= state.layers.length - 1) return;
 
-      ensureAudio();
       startAmbientMusicRef.current();
       const point = pointerFromEvent(event);
       state.pointers.set(event.pointerId, point);
@@ -1069,6 +1069,7 @@ export function TearableStory({ imageUrls, title, disabled = false, hideReset = 
     }
 
     function playTearSound(speed: number) {
+      if (!revealSoundEffectsEnabled) return;
       const audio = ensureAudio();
       if (!audio) return;
 
@@ -1101,6 +1102,7 @@ export function TearableStory({ imageUrls, title, disabled = false, hideReset = 
     }
 
     function playDropSound() {
+      if (!revealSoundEffectsEnabled) return;
       const audio = ensureAudio();
       if (!audio) return;
 
@@ -1225,7 +1227,7 @@ export function TearableStory({ imageUrls, title, disabled = false, hideReset = 
         className={`pointer-events-none absolute inset-0 z-20 h-full w-full shadow-[inset_0_0_120px_rgba(33,27,22,0.24)] ${
           introVisible && !disabled ? "block" : "hidden"
         }`}
-        aria-label="Someone has shared a Moment with you. To experience it, place your finger on the screen and move it along the surface. You have 3 cycles of this Moment before it fades. Visit Momentoria to make and share your own Moment."
+        aria-label="Someone has shared a Momenta with you. To experience it, place your finger on the screen and move it along the surface. You have 3 cycles of this Momenta before it fades. Visit Momentoria to make and share your own Momenta."
       />
       <div className="absolute bottom-5 right-5 z-10 flex items-end gap-3 text-right text-cream sm:bottom-8 sm:right-8">
         <div>
