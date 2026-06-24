@@ -17,6 +17,7 @@ export function CreateMomentoriaForm() {
   const [blobStatus, setBlobStatus] = useState<BlobStatus>("checking");
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState("");
+  const [copyStatus, setCopyStatus] = useState("");
 
   const fileNames = useMemo(() => files.map((file) => file.name).join(", "), [files]);
   const orderedFiles = useMemo(
@@ -72,6 +73,7 @@ export function CreateMomentoriaForm() {
     event.preventDefault();
     setError("");
     setShareUrl("");
+    setCopyStatus("");
     setUploadProgress(0);
     setUploadStatus("");
     const formData = new FormData(event.currentTarget);
@@ -148,6 +150,7 @@ export function CreateMomentoriaForm() {
       setUploadProgress(100);
       setUploadStatus("Momentoria created.");
       setShareUrl(`${window.location.origin}${result.url}`);
+      setCopyStatus("");
     } catch (uploadError) {
       const message =
         uploadError instanceof DOMException && uploadError.name === "AbortError"
@@ -162,146 +165,179 @@ export function CreateMomentoriaForm() {
     }
   }
 
+  async function copyShareUrl() {
+    if (!shareUrl) return;
+
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopyStatus("Copied");
+    } catch {
+      setCopyStatus("Select the link to copy");
+    }
+  }
+
   return (
-    <form onSubmit={handleSubmit} className="rounded-[8px] border border-ink/10 bg-white/54 p-5 shadow-soft backdrop-blur sm:p-7">
-      <div className="grid gap-5">
-        <label className="grid gap-2">
-          <span className="text-sm font-semibold text-ink">Title</span>
-          <input
-            name="title"
-            required
-            maxLength={80}
-            className="min-h-12 rounded-[6px] border border-ink/14 bg-white px-4 outline-none transition focus:border-ink/60"
-            placeholder="Summer in Sikkim"
-          />
-        </label>
+    <>
+      <form onSubmit={handleSubmit} className="rounded-[8px] border border-ink/10 bg-white/54 p-5 shadow-soft backdrop-blur sm:p-7">
+        <div className="grid gap-5">
+          <label className="grid gap-2">
+            <span className="text-sm font-semibold text-ink">Title</span>
+            <input
+              name="title"
+              required
+              maxLength={80}
+              className="min-h-12 rounded-[6px] border border-ink/14 bg-white px-4 outline-none transition focus:border-ink/60"
+              placeholder="Summer in Sikkim"
+            />
+          </label>
 
-        <label className="grid gap-2">
-          <span className="text-sm font-semibold text-ink">Short message</span>
-          <textarea
-            name="message"
-            required
-            maxLength={220}
-            rows={4}
-            className="resize-none rounded-[6px] border border-ink/14 bg-white px-4 py-3 outline-none transition focus:border-ink/60"
-            placeholder="I will always remember this amazing voyage!"
-          />
-        </label>
+          <label className="grid gap-2">
+            <span className="text-sm font-semibold text-ink">Short message</span>
+            <textarea
+              name="message"
+              required
+              maxLength={220}
+              rows={4}
+              className="resize-none rounded-[6px] border border-ink/14 bg-white px-4 py-3 outline-none transition focus:border-ink/60"
+              placeholder="I will always remember this amazing voyage!"
+            />
+          </label>
 
-        <label className="grid gap-2">
-          <span className="text-sm font-semibold text-ink">Recipient name</span>
-          <input
-            name="recipientName"
-            maxLength={60}
-            className="min-h-12 rounded-[6px] border border-ink/14 bg-white px-4 outline-none transition focus:border-ink/60"
-            placeholder="Optional"
-          />
-        </label>
+          <label className="grid gap-2">
+            <span className="text-sm font-semibold text-ink">Recipient name</span>
+            <input
+              name="recipientName"
+              maxLength={60}
+              className="min-h-12 rounded-[6px] border border-ink/14 bg-white px-4 outline-none transition focus:border-ink/60"
+              placeholder="Optional"
+            />
+          </label>
 
-        <label className="grid gap-2">
-          <span className="text-sm font-semibold text-ink">Your email</span>
-          <input
-            name="makerEmail"
-            type="email"
-            required
-            maxLength={120}
-            className="min-h-12 rounded-[6px] border border-ink/14 bg-white px-4 outline-none transition focus:border-ink/60"
-            placeholder="you@example.com"
-          />
-        </label>
+          <label className="grid gap-2">
+            <span className="text-sm font-semibold text-ink">Your email</span>
+            <input
+              name="makerEmail"
+              type="email"
+              required
+              maxLength={120}
+              className="min-h-12 rounded-[6px] border border-ink/14 bg-white px-4 outline-none transition focus:border-ink/60"
+              placeholder="you@example.com"
+            />
+          </label>
 
-        <label className="grid gap-2">
-          <span className="text-sm font-semibold text-ink">Five images</span>
-          <input
-            name="images"
-            type="file"
-            accept="image/*"
-            multiple
-            required
-            onChange={(event) => {
-              setFiles(Array.from(event.target.files ?? []).slice(0, 5));
-              setShareUrl("");
-            }}
-            className="rounded-[6px] border border-dashed border-ink/24 bg-white px-4 py-5 text-sm file:mr-4 file:rounded-full file:border-0 file:bg-ink file:px-4 file:py-2 file:text-sm file:font-semibold file:text-cream"
-          />
-          <span className="text-sm text-ink/58">{files.length ? `${files.length} selected: ${fileNames}` : "Select exactly 5 image files."}</span>
-        </label>
+          <label className="grid gap-2">
+            <span className="text-sm font-semibold text-ink">Five images</span>
+            <input
+              name="images"
+              type="file"
+              accept="image/*"
+              multiple
+              required
+              onChange={(event) => {
+                setFiles(Array.from(event.target.files ?? []).slice(0, 5));
+                setShareUrl("");
+              }}
+              className="rounded-[6px] border border-dashed border-ink/24 bg-white px-4 py-5 text-sm file:mr-4 file:rounded-full file:border-0 file:bg-ink file:px-4 file:py-2 file:text-sm file:font-semibold file:text-cream"
+            />
+            <span className="text-sm text-ink/58">{files.length ? `${files.length} selected: ${fileNames}` : "Select exactly 5 image files."}</span>
+          </label>
 
-        {orderedFiles.length ? (
-          <section className="grid gap-3" aria-label="Image layer order">
-            <div>
-              <h2 className="text-sm font-semibold text-ink">Layer order</h2>
-              <p className="mt-1 text-sm text-ink/58">The first image is revealed first. Move images until the final layer stack feels right.</p>
-            </div>
+          {orderedFiles.length ? (
+            <section className="grid gap-3" aria-label="Image layer order">
+              <div>
+                <h2 className="text-sm font-semibold text-ink">Layer order</h2>
+                <p className="mt-1 text-sm text-ink/58">The first image is revealed first. Move images until the final layer stack feels right.</p>
+              </div>
 
-            <ol className="grid gap-3">
-              {orderedFiles.map((item, index) => (
-                <li key={`${item.file.name}-${item.file.lastModified}-${index}`} className="grid grid-cols-[72px_1fr_auto] items-center gap-3 rounded-[6px] border border-ink/10 bg-white/72 p-2">
-                  <div className="relative h-[72px] w-[72px] overflow-hidden rounded-[5px] bg-ink/8">
-                    <Image src={item.previewUrl} alt="" fill sizes="72px" className="object-cover" unoptimized />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-ink">{item.label}</p>
-                    <p className="mt-1 truncate text-sm text-ink/58">{item.file.name}</p>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      disabled={index === 0}
-                      onClick={() => moveFile(index, -1)}
-                      aria-label={`Move ${item.file.name} up`}
-                      className="grid h-9 w-9 place-items-center rounded-full border border-ink/14 bg-white text-base font-semibold leading-none text-ink transition hover:border-ink/42 disabled:cursor-not-allowed disabled:opacity-35"
-                    >
-                      ↑
-                    </button>
-                    <button
-                      type="button"
-                      disabled={index === orderedFiles.length - 1}
-                      onClick={() => moveFile(index, 1)}
-                      aria-label={`Move ${item.file.name} down`}
-                      className="grid h-9 w-9 place-items-center rounded-full border border-ink/14 bg-white text-base font-semibold leading-none text-ink transition hover:border-ink/42 disabled:cursor-not-allowed disabled:opacity-35"
-                    >
-                      ↓
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          </section>
-        ) : null}
-      </div>
-
-      {error ? <p className="mt-5 rounded-[6px] bg-rose/15 px-4 py-3 text-sm font-semibold text-ink">{error}</p> : null}
-
-      {submitting ? (
-        <div className="mt-5 rounded-[6px] border border-ink/10 bg-white/60 p-4">
-          <div className="flex items-center justify-between gap-3 text-sm font-semibold text-ink">
-            <span>{uploadStatus || (uploadProgress < 100 ? "Uploading images..." : "Saving Momentoria...")}</span>
-            <span>{uploadProgress}%</span>
-          </div>
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-ink/10">
-            <div className="h-full rounded-full bg-sage transition-all" style={{ width: `${uploadProgress}%` }} />
-          </div>
+              <ol className="grid gap-3">
+                {orderedFiles.map((item, index) => (
+                  <li key={`${item.file.name}-${item.file.lastModified}-${index}`} className="grid grid-cols-[72px_1fr_auto] items-center gap-3 rounded-[6px] border border-ink/10 bg-white/72 p-2">
+                    <div className="relative h-[72px] w-[72px] overflow-hidden rounded-[5px] bg-ink/8">
+                      <Image src={item.previewUrl} alt="" fill sizes="72px" className="object-cover" unoptimized />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-ink">{item.label}</p>
+                      <p className="mt-1 truncate text-sm text-ink/58">{item.file.name}</p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        disabled={index === 0}
+                        onClick={() => moveFile(index, -1)}
+                        aria-label={`Move ${item.file.name} up`}
+                        className="grid h-9 w-9 place-items-center rounded-full border border-ink/14 bg-white text-base font-semibold leading-none text-ink transition hover:border-ink/42 disabled:cursor-not-allowed disabled:opacity-35"
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        disabled={index === orderedFiles.length - 1}
+                        onClick={() => moveFile(index, 1)}
+                        aria-label={`Move ${item.file.name} down`}
+                        className="grid h-9 w-9 place-items-center rounded-full border border-ink/14 bg-white text-base font-semibold leading-none text-ink transition hover:border-ink/42 disabled:cursor-not-allowed disabled:opacity-35"
+                      >
+                        ↓
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          ) : null}
         </div>
-      ) : null}
+
+        {error ? <p className="mt-5 rounded-[6px] bg-rose/15 px-4 py-3 text-sm font-semibold text-ink">{error}</p> : null}
+
+        {submitting ? (
+          <div className="mt-5 rounded-[6px] border border-ink/10 bg-white/60 p-4">
+            <div className="flex items-center justify-between gap-3 text-sm font-semibold text-ink">
+              <span>{uploadStatus || (uploadProgress < 100 ? "Uploading images..." : "Saving Momentoria...")}</span>
+              <span>{uploadProgress}%</span>
+            </div>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-ink/10">
+              <div className="h-full rounded-full bg-sage transition-all" style={{ width: `${uploadProgress}%` }} />
+            </div>
+          </div>
+        ) : null}
+
+        <button
+          type="submit"
+          disabled={submitting}
+          className="mt-6 inline-flex min-h-12 w-full items-center justify-center rounded-full bg-ink px-6 text-sm font-semibold text-cream transition hover:bg-dusk disabled:cursor-wait disabled:opacity-60"
+        >
+          {submitting ? "Creating..." : "Create private link"}
+        </button>
+      </form>
 
       {shareUrl ? (
-        <div className="mt-5 rounded-[6px] border border-sage/30 bg-sage/12 p-4">
-          <p className="text-sm font-semibold text-ink">Private share link</p>
-          <a href={shareUrl} className="mt-2 block break-all text-sm text-ink/72 underline underline-offset-4">
-            {shareUrl}
-          </a>
-        </div>
+        <aside
+          aria-live="polite"
+          className="fixed inset-x-4 bottom-5 z-50 mx-auto max-w-xl rounded-[8px] border border-sage/30 bg-cream/96 p-4 shadow-soft backdrop-blur sm:bottom-8"
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-ink">Your private link is ready</p>
+              <a href={shareUrl} className="mt-2 block truncate text-sm text-ink/70 underline underline-offset-4">
+                {shareUrl}
+              </a>
+              {copyStatus ? <p className="mt-2 text-xs font-semibold text-sage">{copyStatus}</p> : null}
+            </div>
+            <button
+              type="button"
+              onClick={copyShareUrl}
+              aria-label="Copy private link"
+              title="Copy private link"
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-ink/12 bg-white text-ink transition hover:border-ink/38"
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="9" y="9" width="10" height="10" rx="2" />
+                <path d="M5 15V7a2 2 0 0 1 2-2h8" />
+              </svg>
+            </button>
+          </div>
+        </aside>
       ) : null}
-
-      <button
-        type="submit"
-        disabled={submitting}
-        className="mt-6 inline-flex min-h-12 w-full items-center justify-center rounded-full bg-ink px-6 text-sm font-semibold text-cream transition hover:bg-dusk disabled:cursor-wait disabled:opacity-60"
-      >
-        {submitting ? "Creating..." : "Create private link"}
-      </button>
-    </form>
+    </>
   );
 }
 
