@@ -172,7 +172,7 @@ export function CreateMomentoriaForm() {
             required
             maxLength={80}
             className="min-h-12 rounded-[6px] border border-ink/14 bg-white px-4 outline-none transition focus:border-ink/60"
-            placeholder="Summer in Lisbon"
+            placeholder="Summer in Sikkim"
           />
         </label>
 
@@ -184,7 +184,7 @@ export function CreateMomentoriaForm() {
             maxLength={220}
             rows={4}
             className="resize-none rounded-[6px] border border-ink/14 bg-white px-4 py-3 outline-none transition focus:border-ink/60"
-            placeholder="A small story for a day I keep returning to."
+            placeholder="I will always remember this amazing voyage!"
           />
         </label>
 
