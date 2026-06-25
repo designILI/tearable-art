@@ -89,12 +89,12 @@ export function ShareMomentoria({ momentoria }: ShareMomentoriaProps) {
       />
 
       <section className="pointer-events-none absolute left-0 top-0 z-10 w-full p-5 sm:p-8">
-        <div className="max-w-xl">
+        <div className="max-w-[17rem] sm:max-w-xs lg:max-w-sm">
           {momentoria.recipientName ? (
             <p className="text-sm font-semibold uppercase tracking-[0.22em] text-cream/68">For {momentoria.recipientName}</p>
           ) : null}
-          <h1 className="mt-2 font-serif text-4xl font-semibold leading-none text-cream drop-shadow sm:text-6xl">{momentoria.title}</h1>
-          <p className="mt-4 max-w-md text-sm leading-6 text-cream/78 drop-shadow sm:text-base">{momentoria.message}</p>
+          <h1 className="mt-2 break-words font-serif text-4xl font-semibold leading-none text-cream drop-shadow sm:text-5xl">{momentoria.title}</h1>
+          <p className="mt-4 text-sm leading-6 text-cream/78 drop-shadow sm:text-base">{momentoria.message}</p>
         </div>
       </section>
 

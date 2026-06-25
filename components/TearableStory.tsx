@@ -57,7 +57,12 @@ const palettes: [string, string, string][] = [
   ["#c9ac8f", "#8a5743", "#160f0c"],
 ];
 
-const ambientTrackSources = ["/assets/audio/momentoria-ambient.mp3"];
+const ambientTrackSources = [
+  "/assets/audio/momentoria-ambient.mp3",
+  "/assets/audio/Momentoria 2.mp3",
+  "/assets/audio/Momentoria 3.mp3",
+  "/assets/audio/Momentoria 3 (1).mp3",
+];
 const revealSoundEffectsEnabled = false;
 
 export function TearableStory({ imageUrls, title, disabled = false, hideReset = false, onCompleteReveal, onReset }: TearableStoryProps) {
